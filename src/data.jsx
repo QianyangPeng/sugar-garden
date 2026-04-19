@@ -56,12 +56,14 @@ const RARITY_META = {
 const RARITY_ORDER = ['N', 'R', 'SR', 'SSR', 'UR'];
 
 // Per-pull probabilities. Each pull is an independent roll with these weights.
+// v2 tune (2026-04-19): UR bumped 1% → 5%, SSR 4% → 8%. See PLAN.md.
+// (Dynamic per-quality distributions are planned for a later batch.)
 const RARITY_PROB = {
-  N:    0.50,
+  N:    0.40,
   R:    0.30,
-  SR:   0.15,
-  SSR:  0.04,
-  UR:   0.01,
+  SR:   0.17,
+  SSR:  0.08,
+  UR:   0.05,
 };
 
 // Pulls allocated to today, based on yesterday's final quality.
@@ -88,10 +90,15 @@ const FLOWERS = {
   'c-bluebell':   { name: '风铃草',   rarity: 'N',    petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell',  desc: '蓝色钟铃' },
   'c-pansy':      { name: '三色堇',   rarity: 'N',    petal: '#b892ff', center: '#ffd24a', shape: 'pansy',     desc: '紫黄三色' },
 
-  // R (3) — 稀有，蓝色
+  // R (8) — 稀有，蓝色
   'u-emerald':    { name: '翡翠花',   rarity: 'R',    petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',   desc: '翠绿菱形，坚毅绽放' },
   'r-honeybee':   { name: '蜂蜜花',   rarity: 'R',    petal: '#ffd24a', center: '#7c4a1d', shape: 'honeybee',  desc: '小蜜蜂最爱的花' },
   'r-crystalrose':{ name: '水晶玫瑰', rarity: 'R',    petal: '#a0e7f0', center: '#ffffff', shape: 'crystalrose',desc: '晶莹剔透的梦想之花' },
+  'r-lavender':   { name: '薰衣草',   rarity: 'R',    petal: '#b892ff', center: '#6f2bb5', shape: 'lavender',  desc: '地中海的蓝紫色穗状花序' },
+  'r-iris':       { name: '鸢尾',     rarity: 'R',    petal: '#b892ff', center: '#ffd24a', shape: 'iris',      desc: '三瓣立起、三瓣下垂' },
+  'r-hydrangea':  { name: '绣球花',   rarity: 'R',    petal: '#b3c8ff', center: '#ffd24a', shape: 'hydrangea', desc: '蓝粉渐变的球状簇生' },
+  'r-violet':     { name: '紫罗兰',   rarity: 'R',    petal: '#9470d0', center: '#ffd24a', shape: 'violet',    desc: '五瓣心形，上浅下深' },
+  'r-forgetmenot':{ name: '勿忘我',   rarity: 'R',    petal: '#7ec4ff', center: '#ffd24a', shape: 'forgetmenot',desc: '五圆蓝瓣 + 亮黄花心' },
 
   // SR (3) — 超稀，紫色
   'r-moonflower': { name: '月光花',   rarity: 'SR',   petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower',desc: '只在糖分很少的夜晚开放' },

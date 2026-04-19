@@ -345,6 +345,81 @@ function renderFlowerHead(shape, petal, center, quality) {
         <path d="M -4 0 L 0 -6 L 4 0 Z" fill="#c2453c" />
       </>);
 
+    // R — 薰衣草：垂直小花穗
+    case 'lavender':
+      return g(<>
+        <line x1="0" y1="-24" x2="0" y2="6" stroke="#6f2bb5" strokeWidth="1.2" />
+        {[-22, -16, -10, -4, 2].map((y, i) => (
+          <g key={i} transform={`translate(0 ${y})`}>
+            <circle cx="-4.5" cy="0" r="3" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="0.8" />
+            <circle cx="4.5" cy="0" r="3" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="0.8" />
+            <circle cx="0" cy="-1.5" r="3.5" fill={petal} stroke="#6f2bb5" strokeWidth="0.8" />
+          </g>
+        ))}
+        <circle cx="0" cy="-27" r="2" fill="#b892ff" stroke="#6f2bb5" strokeWidth="0.6" />
+      </>);
+
+    // R — 鸢尾：3 瓣立起 + 3 瓣下垂
+    case 'iris':
+      return g(<>
+        {[-35, 0, 35].map(a => (
+          <path key={'u'+a} d="M 0 0 L -3.5 -10 Q 0 -24 3.5 -10 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform={`rotate(${a})`} />
+        ))}
+        {[145, 180, 215].map(a => (
+          <path key={'d'+a} d="M 0 0 L -4.5 8 Q 0 18 4.5 8 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" opacity="0.92" transform={`rotate(${a})`} />
+        ))}
+        <path d="M 0 -2 L 0 6" stroke="#ffd24a" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx="0" cy="0" r="2.5" fill="#ffd24a" stroke="#1c6fc2" strokeWidth="0.8" />
+      </>);
+
+    // R — 绣球花：球状簇生小四瓣花
+    case 'hydrangea':
+      return g(<>
+        {[
+          {x:-10, y:-12, c:'#b3c8ff'},
+          {x:0,   y:-18, c:'#d8b8e8'},
+          {x:10,  y:-12, c:'#b3c8ff'},
+          {x:-14, y:-4,  c:'#d8b8e8'},
+          {x:-4,  y:-3,  c:'#ffd4e8'},
+          {x:6,   y:-5,  c:'#b3c8ff'},
+          {x:14,  y:-2,  c:'#d8b8e8'},
+          {x:-8,  y:6,   c:'#ffd4e8'},
+          {x:3,   y:8,   c:'#b3c8ff'},
+          {x:11,  y:6,   c:'#d8b8e8'},
+          {x:-2,  y:14,  c:'#ffd4e8'},
+        ].map((p, i) => (
+          <g key={i} transform={`translate(${p.x} ${p.y})`}>
+            <circle cx="-2" cy="-2" r="2.3" fill={p.c} stroke="#6f2bb5" strokeWidth="0.5" />
+            <circle cx="2"  cy="-2" r="2.3" fill={p.c} stroke="#6f2bb5" strokeWidth="0.5" />
+            <circle cx="-2" cy="2"  r="2.3" fill={p.c} stroke="#6f2bb5" strokeWidth="0.5" />
+            <circle cx="2"  cy="2"  r="2.3" fill={p.c} stroke="#6f2bb5" strokeWidth="0.5" />
+            <circle cx="0"  cy="0"  r="0.9" fill="#ffd24a" />
+          </g>
+        ))}
+      </>);
+
+    // R — 紫罗兰：5 瓣心形，上 2 瓣浅 + 下 3 瓣深
+    case 'violet':
+      return g(<>
+        <ellipse cx="0" cy="0" rx="8" ry="11" fill="#d8b8f0" stroke="#1c6fc2" strokeWidth="1.3" transform="translate(-7 -9) rotate(-25)" />
+        <ellipse cx="0" cy="0" rx="8" ry="11" fill="#d8b8f0" stroke="#1c6fc2" strokeWidth="1.3" transform="translate(7 -9) rotate(25)" />
+        <ellipse cx="0" cy="0" rx="8" ry="11" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform="translate(-11 4) rotate(-55)" />
+        <ellipse cx="0" cy="0" rx="8" ry="11" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform="translate(11 4) rotate(55)" />
+        <ellipse cx="0" cy="12" rx="9" ry="11" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" />
+        <circle cx="0" cy="0" r="3" fill={center} stroke="#1c6fc2" strokeWidth="1" />
+        <path d="M -1 1 L -3 8 M 1 1 L 3 8" stroke="#1c6fc2" strokeWidth="0.9" opacity="0.55" />
+      </>);
+
+    // R — 勿忘我：5 圆蓝瓣 + 亮黄心
+    case 'forgetmenot':
+      return g(<>
+        {[0, 72, 144, 216, 288].map(a => (
+          <circle key={a} cx="0" cy="-10" r="6" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="4.5" fill="#ffd24a" stroke="#1c6fc2" strokeWidth="1.1" />
+        <circle cx="-1" cy="-1" r="1.4" fill="#fff2a8" />
+      </>);
+
     // UR — 星光花：十芒星射线 + 脉动内核
     case 'starlight':
       return g(<>
