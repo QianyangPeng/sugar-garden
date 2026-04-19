@@ -219,6 +219,43 @@ function renderFlowerHead(shape, petal, center, quality) {
         <path d="M -4 0 L 0 -6 L 4 0 Z" fill="#c2453c" />
       </>);
 
+    // UR — 星光花：十芒星射线 + 脉动内核
+    case 'starlight':
+      return g(<>
+        {[0,36,72,108,144,180,216,252,288,324].map(a => (
+          <path key={'o'+a} d="M 0 0 L -4 -14 L 0 -28 L 4 -14 Z" fill={petal} stroke="#c28c1f" strokeWidth="0.8" transform={`rotate(${a})`} />
+        ))}
+        {[18,54,90,126,162,198,234,270,306,342].map(a => (
+          <path key={'i'+a} d="M 0 0 L -2.5 -8 L 0 -18 L 2.5 -8 Z" fill="#ffffff" opacity="0.85" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="8" fill={center} stroke="#c28c1f" strokeWidth="1.5" />
+        <circle cx="0" cy="0" r="4" fill="#ffffff" opacity="0.9">
+          <animate attributeName="r" values="3;5;3" dur="1.8s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.5;1;0.5" dur="1.8s" repeatCount="indefinite" />
+        </circle>
+      </>);
+
+    // UR — 琉璃花：六棱水晶折射层 + 闪光
+    case 'crystal':
+      return g(<>
+        {[{a:0,c:'#ff5c6c'},{a:60,c:'#ffb085'},{a:120,c:'#ffd24a'},{a:180,c:'#7ad9b5'},{a:240,c:'#7ec4ff'},{a:300,c:'#b892ff'}].map((p,i) => (
+          <polygon key={i} points="0,0 -6,-14 0,-26 6,-14" fill={p.c} stroke="#2b2033" strokeWidth="1.2" opacity="0.92" transform={`rotate(${p.a})`} />
+        ))}
+        {[30,90,150,210,270,330].map(a => (
+          <polygon key={'i'+a} points="0,-2 -3,-10 0,-18 3,-10" fill="#ffffff" opacity="0.75" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="4" fill="#ffd24a" stroke="#2b2033" strokeWidth="1" />
+        <circle cx="-1.5" cy="-1.5" r="1.5" fill="#fff" opacity="0.95">
+          <animate attributeName="opacity" values="0.3;1;0.3" dur="2.2s" repeatCount="indefinite" />
+        </circle>
+        <polygon points="-20,-5 -22,-8 -18,-8" fill="#ffffff" opacity="0.7">
+          <animate attributeName="opacity" values="0;0.9;0" dur="3s" repeatCount="indefinite" />
+        </polygon>
+        <polygon points="20,5 18,8 22,8" fill="#ffffff" opacity="0.7">
+          <animate attributeName="opacity" values="0;0.9;0" dur="3s" begin="1.5s" repeatCount="indefinite" />
+        </polygon>
+      </>);
+
     default:
       return g(<circle cx="0" cy="0" r="14" fill={petal} />);
   }

@@ -57,6 +57,21 @@ CREATE TABLE IF NOT EXISTS school_sugar (
 
 CREATE INDEX IF NOT EXISTS idx_school_sugar_family_updated ON school_sugar(family_id, updated_at);
 
+-- Per-day spin result + planted slot for the flower field.
+-- spin_json encodes { attempts: [...], keptIndex, pullsAllocated }.
+CREATE TABLE IF NOT EXISTS day_state (
+  family_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  spin_json TEXT,
+  planted_slot TEXT,
+  planted_at INTEGER,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (family_id, date),
+  FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_day_state_family_updated ON day_state(family_id, updated_at);
+
 -- Daily counters for global circuit-breaker. Key: "reg:YYYY-MM-DD" or "fam:<id>:YYYY-MM-DD-HH".
 -- Stored in KV instead; this table is a fallback for audit.
 CREATE TABLE IF NOT EXISTS registration_log (

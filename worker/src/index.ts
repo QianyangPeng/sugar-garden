@@ -302,10 +302,15 @@ async function handleSync(url: URL, auth: { family: Family }, env: Env): Promise
   const school = await env.DB.prepare(
     `SELECT date, sugar, updated_at AS updatedAt FROM school_sugar WHERE family_id = ? AND updated_at > ? ORDER BY updated_at ASC LIMIT 2000`
   ).bind(auth.family.id, since).all();
+  const dayState = await env.DB.prepare(
+    `SELECT date, spin_json AS spinJson, planted_slot AS plantedSlot, planted_at AS plantedAt, updated_at AS updatedAt
+     FROM day_state WHERE family_id = ? AND updated_at > ? ORDER BY updated_at ASC LIMIT 2000`
+  ).bind(auth.family.id, since).all();
   await touchFamily(env, auth.family.id);
   return json({
     entries: entries.results || [],
     schoolSugar: school.results || [],
+    dayState: dayState.results || [],
     now: Date.now(),
   }, 200, env);
 }
@@ -368,6 +373,42 @@ async function handlePutSchoolSugar(req: Request, auth: { family: Family }, env:
     `INSERT INTO school_sugar (family_id, date, sugar, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(family_id, date) DO UPDATE SET sugar = excluded.sugar, updated_at = excluded.updated_at`
   ).bind(auth.family.id, date, sugar, now).run();
+  await touchFamily(env, auth.family.id);
+  return json({ ok: true, updatedAt: now }, 200, env);
+}
+
+async function handlePutDayState(req: Request, auth: { family: Family }, env: Env): Promise<Response> {
+  if (!(await rateLimitWrite(env, auth.family.id))) return err("too_many_requests", 429, env);
+  let body: any;
+  try { body = await req.json(); } catch { return err("invalid_json", 400, env); }
+  const date = body?.date;
+  if (!isYmd(date)) return err("bad_date", 400, env);
+  const spinJson = body?.spinJson ?? null;
+  if (spinJson != null && (typeof spinJson !== "string" || spinJson.length > 4000)) {
+    return err("bad_spin", 400, env);
+  }
+  const plantedSlot = body?.plantedSlot ?? null;
+  if (plantedSlot != null && (typeof plantedSlot !== "string" || plantedSlot.length > 32)) {
+    return err("bad_slot", 400, env);
+  }
+  const plantedAt = plantedSlot ? clampNum(body?.plantedAt, 0, Date.now() + 86400000, Date.now()) : null;
+  const now = Date.now();
+  // Merge: only update fields the client sent; keep others
+  const existing = await env.DB.prepare(
+    "SELECT spin_json, planted_slot, planted_at FROM day_state WHERE family_id = ? AND date = ?"
+  ).bind(auth.family.id, date).first<{ spin_json: string | null; planted_slot: string | null; planted_at: number | null }>();
+  const nextSpin = spinJson !== undefined ? (spinJson === null ? existing?.spin_json ?? null : spinJson) : (existing?.spin_json ?? null);
+  const nextSlot = plantedSlot !== undefined ? (plantedSlot === null ? existing?.planted_slot ?? null : plantedSlot) : (existing?.planted_slot ?? null);
+  const nextPlantedAt = plantedSlot ? plantedAt : (existing?.planted_at ?? null);
+  if (existing) {
+    await env.DB.prepare(
+      `UPDATE day_state SET spin_json = ?, planted_slot = ?, planted_at = ?, updated_at = ? WHERE family_id = ? AND date = ?`
+    ).bind(nextSpin, nextSlot, nextPlantedAt, now, auth.family.id, date).run();
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO day_state (family_id, date, spin_json, planted_slot, planted_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(auth.family.id, date, nextSpin, nextSlot, nextPlantedAt, now).run();
+  }
   await touchFamily(env, auth.family.id);
   return json({ ok: true, updatedAt: now }, 200, env);
 }
@@ -436,6 +477,9 @@ export default {
       }
       if (url.pathname === "/school-sugar" && method === "PUT") {
         return await handlePutSchoolSugar(req, authOrRes, env);
+      }
+      if (url.pathname === "/day-state" && method === "PUT") {
+        return await handlePutDayState(req, authOrRes, env);
       }
 
       return err("not_found", 404, env);

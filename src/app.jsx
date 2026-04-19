@@ -1,4 +1,4 @@
-// Main app wiring. Multi-family, cloud-synced.
+// Main app wiring. Multi-family, cloud-synced, gacha flower system.
 // React hook bindings (useState, useEffect, useRef, useMemo) are declared at the
 // top of screens.jsx and shared via the Realm's global environment. Re-declaring
 // them here would clash with that binding under Babel Standalone.
@@ -11,16 +11,16 @@ function App() {
   const [schoolOpen, setSchoolOpen] = useState(false);
   const [overageOpen, setOverageOpen] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState(null);
-  const [plantQueue, setPlantQueue] = useState([]);
-  const [choice, setChoice] = useState(null);   // 'new' | 'join'
+  const [plantQueue, setPlantQueue] = useState([]);   // list of dates to plant from yesterday (FIFO)
+  const [spinNeeded, setSpinNeeded] = useState(false);
+  const [choice, setChoice] = useState(null);
   const [inviteFrag, setInviteFrag] = useState(() => parseInviteFragment());
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | offline | authErr
+  const [syncStatus, setSyncStatus] = useState('idle');
   const didBootRef = useRef(false);
   const firstSyncRef = useRef(false);
 
-  // ---- Identity gate ----
   const needWelcome = !identity;
   const needOnboard = !!identity && !state.settings.onboarded;
 
@@ -57,30 +57,29 @@ function App() {
     return () => { cancelled = true; clearInterval(iv); window.removeEventListener('online', onOnline); };
   }, [identity]);
 
-  // ---- First-open-today: plant past days' flowers ----
+  // ---- First-open-today: plant yesterday's kept flowers, then spin today ----
+  // Runs once per session after initial sync, when state.lastOpenedDate !== today.
   useEffect(() => {
     if (didBootRef.current) return;
     if (needWelcome || needOnboard) return;
-    if (!firstSyncRef.current) return;   // wait for initial sync
+    if (!firstSyncRef.current) return;
     didBootRef.current = true;
     const today = ymd(new Date());
-    if (state.lastOpenedDate !== today) {
-      const pending = unplantedPastDays(state);
-      let s = state;
-      const q = [];
-      for (const d of pending) {
-        const res = plantFlowerFor(s, d, identity.familyId);
-        s = res.state;
-        if (res.newlyPlanted) q.push({ date: d, flower: res.newlyPlanted.flower, newUnlocks: res.newUnlocks });
-      }
-      s = { ...s, lastOpenedDate: today };
-      saveState(s);
-      setState(s);
-      if (q.length > 0) setPlantQueue([q[q.length - 1]]);
+    const unplanted = unplantedSpunDates(state);
+    if (unplanted.length) setPlantQueue(unplanted);
+    const todayDay = state.days[today];
+    const todaySpinLocked = todayDay?.spin?.keptIndex != null;
+    if (!todaySpinLocked && state.lastOpenedDate !== today) {
+      setSpinNeeded(true);
     }
-  }, [needWelcome, needOnboard, state, identity, syncStatus]);
+    if (state.lastOpenedDate !== today) {
+      const next = { ...state, lastOpenedDate: today };
+      saveState(next);
+      setState(next);
+    }
+  }, [needWelcome, needOnboard, firstSyncRef.current, state]);
 
-  // ---- Overage detection ----
+  // ---- Overage detection (based on quality) ----
   useEffect(() => {
     if (needWelcome || needOnboard) return;
     const date = ymd(new Date());
@@ -93,23 +92,19 @@ function App() {
     }
   }, [state.days]);
 
-  // Hide boot splash
   useEffect(() => {
     const el = document.getElementById('boot');
     if (el) el.classList.add('gone');
   }, []);
 
-  // ---- Handlers ----
+  // ---- Identity handlers ----
 
   async function handleCreateNew({ childName, dateOfBirth, dailyLimit, memberName, turnstileToken }) {
     setBusy(true); setErrorMsg('');
     try {
       const id = await createNewFamily({ turnstileToken, childName, dateOfBirth, dailyLimit, memberName });
-      const initial = updateSettings(defaultState(), {
-        childName, dateOfBirth, dailyLimit, onboarded: true,
-      });
-      // Server is already in sync; clear pending flag we just created.
-      const cleaned = markSettingsSynced({ ...initial, lastOpenedDate: ymd(new Date()), lastSyncAt: Date.now() });
+      const initial = updateSettings(defaultState(), { childName, dateOfBirth, dailyLimit, onboarded: true });
+      const cleaned = markSettingsSynced({ ...initial, lastSyncAt: Date.now() });
       saveState(cleaned);
       setState(cleaned);
       setIdentity(id);
@@ -163,18 +158,20 @@ function App() {
     setState(defaultState());
     setRoute('today');
     setPlantQueue([]);
+    setSpinNeeded(false);
     setChoice(null);
     setInviteFrag(parseInviteFragment());
   }
 
   // ---- Auto-push pending ops ----
-  // Any mutation through addEntry/removeEntry/setSchoolSugar/updateSettings sets a _pending
-  // flag; this effect observes state and flushes shortly after (debounced).
   const pushTimerRef = useRef(null);
   useEffect(() => {
     if (!identity) return;
     const hasPending = state.settings._settingsPending ||
-      Object.values(state.days).some(d => d._schoolPending || d.entries.some(e => e._pending));
+      Object.values(state.days).some(d =>
+        d._schoolPending || d._spinPending || d._plantPending ||
+        d.entries.some(e => e._pending)
+      );
     if (!hasPending) return;
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
@@ -201,27 +198,12 @@ function App() {
         busy={busy}
         errorMsg={errorMsg} />;
     }
-    if (!choice) {
-      return <WelcomeScreen onChoose={setChoice} />;
-    }
-    if (choice === 'new') {
-      return <NewFamilyOnboarding
-        onDone={handleCreateNew}
-        onBack={() => { setChoice(null); setErrorMsg(''); }}
-        busy={busy}
-        errorMsg={errorMsg} />;
-    }
-    return <JoinFamilyFlow
-      inviteFrag={inviteFrag}
-      onDone={handleJoin}
-      onBack={() => { setChoice(null); setErrorMsg(''); }}
-      busy={busy}
-      errorMsg={errorMsg} />;
+    if (!choice) return <WelcomeScreen onChoose={setChoice} />;
+    if (choice === 'new') return <NewFamilyOnboarding onDone={handleCreateNew} onBack={() => { setChoice(null); setErrorMsg(''); }} busy={busy} errorMsg={errorMsg} />;
+    return <JoinFamilyFlow inviteFrag={inviteFrag} onDone={handleJoin} onBack={() => { setChoice(null); setErrorMsg(''); }} busy={busy} errorMsg={errorMsg} />;
   }
 
   if (needOnboard) {
-    // This is a safety fallback — normally onboarded flips true in handleCreateNew / handleJoin.
-    // Shows a spinner while the first sync completes for joiners.
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
         background: '#f3f8ee', font: "600 14px 'Noto Sans SC'", color: '#5c6d54' }}>
@@ -230,7 +212,10 @@ function App() {
     );
   }
 
-  const currentCeremony = plantQueue[0];
+  // ---- Daily flow overlays (plant yesterday → spin today → main) ----
+
+  const plantDate = plantQueue[0];
+  const todayDate = ymd(new Date());
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -240,21 +225,28 @@ function App() {
         identity={identity}
         onOpenPicker={() => setPickerOpen(true)}
         onOpenSchool={() => setSchoolOpen(true)}
-        onOpenCalendar={() => setRoute('calendar')}
+        onOpenField={() => setRoute('field')}
         onOpenSettings={() => setRoute('settings')}
         onOpenTrend={() => setRoute('trend')}
+        onOpenHistory={() => setRoute('history')}
         syncStatus={syncStatus}
       />
-      {route === 'calendar' && (
-        <CalendarScreen
+      {route === 'field' && (
+        <FlowerField
           state={state}
-          setState={setState}
           onClose={() => setRoute('today')}
+          onOpenHistory={() => setRoute('history')}
+        />
+      )}
+      {route === 'history' && (
+        <HistoryScreen
+          state={state}
+          onClose={() => setRoute(route === 'history' ? 'today' : 'field')}
           onPickDate={(d) => { setDayDetailDate(d); setRoute('day-detail'); }}
         />
       )}
       {route === 'day-detail' && dayDetailDate && (
-        <DayDetail date={dayDetailDate} state={state} onClose={() => setRoute('calendar')} />
+        <DayDetail date={dayDetailDate} state={state} onClose={() => setRoute('history')} />
       )}
       {route === 'trend' && (
         <TrendScreen state={state} onClose={() => setRoute('today')} />
@@ -269,31 +261,32 @@ function App() {
           onLeaveFamily={handleLeaveFamily}
         />
       )}
-      <FoodPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onPick={handleAddEntry}
-      />
-      <SchoolSheet
-        open={schoolOpen}
-        onClose={() => setSchoolOpen(false)}
-        state={state}
-        setState={setState}
-      />
+      <FoodPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handleAddEntry} />
+      <SchoolSheet open={schoolOpen} onClose={() => setSchoolOpen(false)} state={state} setState={setState} />
       <OverageModal
         open={overageOpen}
         onClose={() => setOverageOpen(false)}
-        total={dayStatus(state, ymd(new Date())).total}
+        total={dayStatus(state, todayDate).total}
         limit={state.settings.dailyLimit}
         name={state.settings.childName || '小宝贝'}
       />
-      {currentCeremony && (
-        <PlantingCeremony
-          date={currentCeremony.date}
-          flower={currentCeremony.flower}
-          newUnlocks={currentCeremony.newUnlocks}
-          childName={state.settings.childName}
+
+      {/* Daily ceremonies (highest z-index): plant yesterday's flower, then spin today */}
+      {plantDate && (
+        <PlantYesterday
+          state={state}
+          setState={setState}
+          date={plantDate}
           onDone={() => setPlantQueue(q => q.slice(1))}
+        />
+      )}
+      {!plantDate && spinNeeded && (
+        <SpinWheel
+          state={state}
+          setState={setState}
+          identity={identity}
+          date={todayDate}
+          onDone={() => setSpinNeeded(false)}
         />
       )}
     </div>

@@ -15,8 +15,6 @@
     --ink-soft: #5c6d54;
     --card: #ffffff;
     --accent: #6ab04c;
-    --soil: #a88968;
-    --soil-dark: #7c6142;
     --danger: #c2453c;
     font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
   }
@@ -24,41 +22,66 @@
   body {
     margin: 0; padding: 24px;
     background: linear-gradient(180deg, #f3f8ee 0%, #e0e9d0 100%);
-    color: var(--ink);
-    min-height: 100vh;
+    color: var(--ink); min-height: 100vh;
   }
   .wrap { max-width: 960px; margin: 0 auto; }
   h1 { font: 700 36px/1.1 'ZCOOL KuaiLe'; margin: 8px 0 4px; }
   .sub { color: var(--ink-soft); font: 500 14px 'Noto Sans SC'; margin: 0 0 24px; }
-  h2 { font: 700 22px 'ZCOOL KuaiLe'; margin: 28px 0 12px; }
+  h2 { font: 700 22px 'ZCOOL KuaiLe'; margin: 28px 0 10px; }
   .note { font: 500 12px 'Noto Sans SC'; color: var(--ink-soft); margin: 4px 0 14px; }
-  .grid {
-    display: grid; gap: 12px;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  }
-  .card {
-    background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
-    padding: 12px 10px; box-shadow: 0 3px 0 var(--ink);
-    display: flex; flex-direction: column; align-items: center; text-align: center;
-    position: relative;
-  }
-  .card .name { font: 700 14px 'ZCOOL KuaiLe'; margin-top: 6px; }
-  .card .rarity {
-    font: 600 10px 'Noto Sans SC'; letter-spacing: 0.5px;
-    padding: 2px 8px; border-radius: 999px; margin-top: 4px;
-  }
-  .card .rarity.common { background: #eaf4e0; color: #3b6e2b; }
-  .card .rarity.rare { background: #ebe1ff; color: #6f4bd2; }
-  .card .rarity.unlock { background: #fde8e2; color: var(--danger); }
-  .card .rarity.special { background: #fff2d4; color: #a36b00; }
-  .card .desc { font: 500 10px/1.4 'Noto Sans SC'; color: var(--ink-soft); margin-top: 4px; max-width: 150px; }
-  .card .q { position: absolute; top: 6px; right: 8px; font: 700 10px 'Noto Sans SC'; color: var(--ink-soft); }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .card { cursor: pointer; transition: transform 0.15s; }
+  .card:hover { transform: translateY(-3px); }
+  .card-inner { padding: 14px 10px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; background: #fff; border-radius: 16px; }
+  .card-name { font: 700 15px 'ZCOOL KuaiLe'; margin-top: 4px; }
+  .card-desc { font: 500 11px/1.45 'Noto Sans SC'; color: var(--ink-soft); margin-top: 6px; max-width: 150px; }
+  .back { display: inline-block; font: 500 13px 'Noto Sans SC'; color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--ink-soft); padding-bottom: 1px; margin-bottom: 12px; }
   footer { text-align: center; color: var(--ink-soft); font-size: 13px; margin: 40px 0 12px; }
   footer a { color: var(--accent); }
-  .back {
-    display: inline-block; font: 500 13px 'Noto Sans SC'; color: var(--ink-soft);
-    text-decoration: none; border-bottom: 1px solid var(--ink-soft); padding-bottom: 1px;
-    margin-bottom: 16px;
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(35,51,31,0.65);
+    display: grid; place-items: center; padding: 20px; z-index: 100;
+  }
+  .modal {
+    width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+    background: #fff; border-radius: 20px; padding: 20px;
+    border: 3px solid var(--ink); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  .modal h3 { font: 700 22px 'ZCOOL KuaiLe'; margin: 4px 0; }
+  .close-btn {
+    position: absolute; top: 12px; right: 12px;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid var(--ink); background: #fff; cursor: pointer;
+    font-size: 14px;
+  }
+  .q-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .q-cell {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 6px; background: #fbf9f0; border-radius: 12px;
+    border: 1.5px solid #e6eadd;
+  }
+  .q-cell-name { font: 600 11px 'Noto Sans SC'; color: var(--ink); margin-top: 4px; }
+  .q-cell-desc { font: 500 9px 'Noto Sans SC'; color: var(--ink-soft); }
+
+  @keyframes sg-rainbow { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+  @keyframes sg-rainbow-rotate { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+  @keyframes sg-sheen { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+  @keyframes sg-sparkle-float {
+    0% { opacity: 0; transform: translateY(0) scale(0.5); }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-40px) scale(1.2); }
+  }
+  @keyframes sg-glow-breath {
+    0%,100% { opacity: 0.35; transform: scale(0.95); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+  }
+  @keyframes sg-tear {
+    0% { opacity: 0; transform: translateY(0) scale(0.5); }
+    25% { opacity: 0.9; }
+    100% { opacity: 0; transform: translateY(30px) scale(1); }
   }
 </style>
 </head>
@@ -66,10 +89,8 @@
 <div class="wrap">
   <a class="back" href="./">← 回主页</a>
   <h1>花朵图鉴</h1>
-  <p class="sub">糖糖花园里一共能开出 18 种花 —— 8 种普通、5 种稀有、3 种解锁。这里是完整展示。</p>
-
+  <p class="sub">糖糖花园里一共能开出 <b id="speciesCount">-</b> 种花，分 5 个稀有度档次。点任一朵看它所有品质状态。</p>
   <div id="root"></div>
-
   <footer>
     <a href="./">进入花园</a> · <a href="https://github.com/QianyangPeng/sugar-garden">源码</a>
   </footer>
@@ -79,96 +100,125 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
-<!-- Reuse the exact flower code from the app (data.jsx provides FLOWERS definitions) -->
+<!-- Reuse the exact flower + rarity code from the app -->
 <script type="text/babel" src="./src/data.jsx"></script>
 <script type="text/babel" src="./src/flowers.jsx"></script>
+<script type="text/babel" src="./src/screens.jsx"></script>
 
 <script type="text/babel">
-const { useState } = React;
+const { useState: uS } = React;
 
-// Species list in display order, grouped by rarity
-const SPECIES_COMMON = [
-  { id: 'c-tulip',     desc: '经典花瓣合抱型' },
-  { id: 'c-daisy',     desc: '淡紫白八瓣' },
-  { id: 'c-sunflower', desc: '金黄十二瓣带棕心' },
-  { id: 'c-poppy',     desc: '朱红五瓣深色花心' },
-  { id: 'c-cosmos',    desc: '粉紫六瓣波斯菊' },
-  { id: 'c-marigold',  desc: '双层橙红万寿菊' },
-  { id: 'c-bluebell',  desc: '蓝色三朵钟铃' },
-  { id: 'c-pansy',     desc: '紫黄三色堇' },
-];
-const SPECIES_RARE = [
-  { id: 'r-moonflower',  desc: '银紫花瓣 · 星星闪烁动画' },
-  { id: 'r-crystalrose', desc: '冰蓝棱形水晶玫瑰' },
-  { id: 'r-rainbowlily', desc: '六色彩虹花瓣' },
-  { id: 'r-stardust',    desc: '深蓝底缀金色星粒' },
-  { id: 'r-honeybee',    desc: '金色花瓣 · 旁边有只小蜜蜂' },
-];
-const SPECIES_UNLOCK = [
-  { id: 'u-emerald', desc: '翡翠八瓣 · 连续 3 天达标' },
-  { id: 'u-sakura',  desc: '樱花粉五瓣 · 连续 5 天达标' },
-  { id: 'u-phoenix', desc: '凤凰朱红展翅 · 连续 7 天达标' },
+const TIER_LABEL = { R: '普通', SR: '稀有', SSR: '超稀', SSSR: '极稀', UR: '传说' };
+const TIER_TRIGGER = {
+  R:    '每日默认最高概率',
+  SR:   '每次抽卡 ~30% 概率',
+  SSR:  '每次抽卡 ~15% 概率',
+  SSSR: '每次抽卡 ~4% 概率，需要抽卡次数多才容易见到',
+  UR:   '每次抽卡 ~1% 概率，极其罕见',
+};
+
+const QUALITY_LIST = [
+  { q: 'perfect', label: '完美',   desc: '<40% 上限' },
+  { q: 'great',   label: '很好',   desc: '40-70%' },
+  { q: 'ok',      label: '还行',   desc: '70-90%' },
+  { q: 'okish',   label: '勉强',   desc: '90-100%' },
+  { q: 'wilted',  label: '蔫了',   desc: '100-130%' },
+  { q: 'dead',    label: '枯萎',   desc: '≥130%' },
 ];
 
-function Card({ speciesId, quality = 'perfect', label, desc, rarity, showQ }) {
-  const f = speciesId ? FLOWERS[speciesId] : null;
-  const rarityMap = { common: '普通', rare: '✨ 稀有', unlock: '🎖 解锁', special: '特殊' };
+function FlowerCard({ speciesId, onClick }) {
+  const f = FLOWERS[speciesId];
   return (
-    <div className="card">
-      {showQ && <div className="q">{showQ}</div>}
-      <FlowerSVG size={90} species={speciesId} quality={quality} animate={true} />
-      <div className="name">{label || f?.name}</div>
-      <div className={`rarity ${rarity}`}>{rarityMap[rarity]}</div>
-      {desc && <div className="desc">{desc}</div>}
+    <div className="card" onClick={() => onClick(speciesId)}>
+      <RarityFrame rarity={f.rarity} padding={5} radius={16} animate={true}>
+        <div className="card-inner">
+          <div style={{ position: 'relative' }}>
+            <FlowerSVG size={90} species={speciesId} quality="perfect" animate headOnly={false} />
+            <QualityFx quality="perfect" rarity={f.rarity} />
+          </div>
+          <div style={{ marginTop: 6 }}><RarityBadge rarity={f.rarity} size="sm" /></div>
+          <div className="card-name">{f.name}</div>
+          <div className="card-desc">{f.desc}</div>
+        </div>
+      </RarityFrame>
+    </div>
+  );
+}
+
+function DetailModal({ speciesId, onClose }) {
+  const f = FLOWERS[speciesId];
+  if (!f) return null;
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
+        <button className="close-btn" onClick={onClose}>✕</button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <RarityFrame rarity={f.rarity} padding={5} radius={18}>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+              <FlowerSVG size={130} species={speciesId} quality="perfect" animate />
+              <QualityFx quality="perfect" rarity={f.rarity} />
+            </div>
+          </RarityFrame>
+          <div style={{ marginTop: 10 }}><RarityBadge rarity={f.rarity} size="md" /></div>
+          <h3 style={{ marginTop: 8 }}>{f.name}</h3>
+          <div style={{ font: "500 12px 'Noto Sans SC'", color: '#5c6d54', textAlign: 'center', marginTop: 4 }}>
+            {f.desc}
+          </div>
+          <div style={{ marginTop: 6, font: "500 11px 'Noto Sans SC'", color: '#8a9a85' }}>
+            {TIER_LABEL[f.rarity]} · {TIER_TRIGGER[f.rarity]}
+          </div>
+        </div>
+
+        <h4 style={{ font: "700 13px 'ZCOOL KuaiLe'", marginTop: 18, marginBottom: 0 }}>6 种品质状态</h4>
+        <p style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54', margin: '4px 0 0' }}>
+          花的品质由当日「糖量/时间」比例决定。wilted 和 dead 是所有花通用的失败态。
+        </p>
+        <div className="q-grid">
+          {QUALITY_LIST.map(({ q, label, desc }) => (
+            <div key={q} className="q-cell">
+              <div style={{ position: 'relative', width: 60, height: 80 }}>
+                <FlowerSVG size={60} species={speciesId} quality={q} animate={false} />
+                <QualityFx quality={q} rarity={f.rarity} />
+              </div>
+              <div className="q-cell-name">{label}</div>
+              <div className="q-cell-desc">{desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 function App() {
+  const [selected, setSelected] = uS(null);
+  const byRarity = {};
+  for (const id of Object.keys(FLOWERS)) {
+    const rarity = FLOWERS[id].rarity;
+    (byRarity[rarity] = byRarity[rarity] || []).push(id);
+  }
+  document.getElementById('speciesCount').textContent = Object.keys(FLOWERS).length;
+
   return (
     <div>
-      <h2>🌸 普通花 · 8 种</h2>
-      <p className="note">当天吃糖量控制在上限之内时抽取。每天根据品质（perfect/great/ok/okish）决定开放程度。</p>
-      <div className="grid">
-        {SPECIES_COMMON.map(s => (
-          <Card key={s.id} speciesId={s.id} rarity="common" desc={s.desc} />
-        ))}
-      </div>
+      {RARITY_ORDER.map(tier => {
+        const list = byRarity[tier] || [];
+        if (!list.length) return null;
+        return (
+          <section key={tier}>
+            <h2>{tier === 'UR' ? '🌈' : tier === 'SSSR' ? '💫' : tier === 'SSR' ? '✨' : tier === 'SR' ? '🌟' : '🌸'}
+              {' '}{tier} · {TIER_LABEL[tier]}（{list.length} 种）</h2>
+            <p className="note">{TIER_TRIGGER[tier]}</p>
+            <div className="grid">
+              {list.map(id => (
+                <FlowerCard key={id} speciesId={id} onClick={setSelected} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
-      <h2>✨ 稀有花 · 5 种</h2>
-      <p className="note">只在糖量 &lt; 50% 上限的日子有 ~18% 概率触发（约每 5-6 个低糖日出一朵）。</p>
-      <div className="grid">
-        {SPECIES_RARE.map(s => (
-          <Card key={s.id} speciesId={s.id} rarity="rare" desc={s.desc} />
-        ))}
-      </div>
-
-      <h2>🎖 解锁花 · 3 种</h2>
-      <p className="note">连续达标到特定天数永久解锁，之后 50% 概率开出。</p>
-      <div className="grid">
-        {SPECIES_UNLOCK.map(s => (
-          <Card key={s.id} speciesId={s.id} rarity="unlock" desc={s.desc} />
-        ))}
-      </div>
-
-      <h2>品质等级 · 同一朵花的 6 种状态</h2>
-      <p className="note">花的品质由当日结束时「糖量 / 上限」比例决定，花瓣大小、花茎倾斜、甚至是否枯萎都会变化。以雏菊为例：</p>
-      <div className="grid">
-        <Card speciesId="c-daisy" quality="perfect" rarity="special" label="Perfect" desc="<40% 上限 · 最大最饱满" showQ="1.0×" />
-        <Card speciesId="c-daisy" quality="great"   rarity="special" label="Great"   desc="40-70% · 标准开放" showQ="0.92×" />
-        <Card speciesId="c-daisy" quality="ok"      rarity="special" label="OK"      desc="70-90% · 茎微倾" showQ="0.85×" />
-        <Card speciesId="c-daisy" quality="okish"   rarity="special" label="OK-ish"  desc="90-100% · 茎歪花头斜" showQ="0.78×" />
-        <Card speciesId="c-daisy" quality="wilted"  rarity="special" label="Wilted"  desc="100-130% · 蔫花（去色下垂）" />
-        <Card speciesId={null}    quality="dead"    rarity="special" label="Dead"    desc="≥130% · 枯枝 + 旁边新芽" />
-      </div>
-
-      <h2>特殊状态</h2>
-      <p className="note">除了按品质开的花，还有几种跨品种的状态：</p>
-      <div className="grid">
-        <Card speciesId={null} quality="bud" rarity="special" label="Bud · 今日花苞" desc="今天这朵花还在生长中，明天早上才定型" />
-        <Card speciesId="c-poppy" quality="wilted" rarity="special" label="Wilted · 蔫花" desc="当天超标时触发，在月历里仍保留（温柔提醒）" />
-        <Card speciesId={null} quality="dead" rarity="special" label="Dead · 枯花" desc="严重超标，花死掉但有个小绿芽暗示「明天重来」" />
-      </div>
+      {selected && <DetailModal speciesId={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

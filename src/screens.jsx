@@ -1,6 +1,589 @@
 // Screen components for the Sugar Garden app.
 const { useState, useEffect, useRef, useMemo } = React;
 
+// ============ RARITY PRIMITIVES ============
+// Used in home card, spin wheel, calendar cells, flower field, gallery.
+const RAINBOW_BG = 'conic-gradient(from 0deg, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c)';
+const RAINBOW_LINEAR = 'linear-gradient(90deg, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c)';
+
+function StarRating({ rarity, size = 12 }) {
+  const r = RARITY_META[rarity] || RARITY_META.R;
+  const isRainbow = rarity === 'UR';
+  return (
+    <span style={{ display: 'inline-flex', gap: 1, lineHeight: 1 }}>
+      {Array.from({ length: r.stars }).map((_, i) => {
+        const base = { fontSize: size, lineHeight: 1 };
+        if (isRainbow) {
+          return <span key={i} style={{
+            ...base,
+            background: RAINBOW_LINEAR, backgroundSize: '200% 100%',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text', color: 'transparent',
+            animation: 'sg-rainbow 4s linear infinite',
+          }}>★</span>;
+        }
+        return <span key={i} style={{ ...base, color: r.color }}>★</span>;
+      })}
+    </span>
+  );
+}
+
+function RarityBadge({ rarity, size = 'md' }) {
+  const r = RARITY_META[rarity] || RARITY_META.R;
+  const isRainbow = rarity === 'UR';
+  const fz = { sm: 10, md: 12, lg: 14 }[size] || 12;
+  const py = { sm: 2, md: 4, lg: 6 }[size] || 4;
+  const px = { sm: 8, md: 10, lg: 14 }[size] || 10;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: `${py}px ${px}px`, borderRadius: 999,
+      background: isRainbow ? RAINBOW_LINEAR : r.color,
+      backgroundSize: isRainbow ? '200% 100%' : undefined,
+      animation: isRainbow ? 'sg-rainbow 4s linear infinite' : null,
+      color: '#fff', font: `700 ${fz}px 'Noto Sans SC'`, letterSpacing: 0.5,
+      textShadow: '0 1px 0 rgba(0,0,0,0.2)',
+      whiteSpace: 'nowrap',
+    }}>
+      {rarity} <StarRating rarity={rarity} size={fz - 1} />
+    </span>
+  );
+}
+
+// Frame that wraps content with a rarity-specific border / glow / sparkles.
+function RarityFrame({ rarity, children, padding = 6, radius = 18, animate = true, style }) {
+  const r = RARITY_META[rarity] || RARITY_META.R;
+  const wrap = { position: 'relative', borderRadius: radius, padding, ...style };
+
+  if (rarity === 'UR') {
+    return (
+      <div style={{
+        ...wrap,
+        background: RAINBOW_BG, backgroundSize: '200% 200%',
+        animation: animate ? 'sg-rainbow-rotate 6s linear infinite' : null,
+        boxShadow: '0 0 18px rgba(255,210,74,0.55), 0 6px 18px rgba(0,0,0,0.1)',
+      }}>
+        <div style={{ background: '#fffef5', borderRadius: radius - 2, padding: 0, position: 'relative', overflow: 'hidden' }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+  if (rarity === 'SSSR') {
+    return (
+      <div style={{
+        ...wrap,
+        background: `linear-gradient(135deg, ${r.color}, #ffd24a, ${r.color})`,
+        backgroundSize: '200% 200%',
+        animation: animate ? 'sg-sheen 5s ease-in-out infinite' : null,
+        boxShadow: `0 0 14px ${r.colorSoft}, 0 4px 12px rgba(0,0,0,0.06)`,
+      }}>
+        <div style={{ background: '#fff', borderRadius: radius - 2 }}>{children}</div>
+      </div>
+    );
+  }
+  if (rarity === 'SSR') {
+    return (
+      <div style={{
+        ...wrap, border: `3px solid ${r.color}`, background: '#fff',
+        boxShadow: `0 3px 10px ${r.colorSoft}`,
+      }}>
+        {children}
+      </div>
+    );
+  }
+  if (rarity === 'SR') {
+    return (
+      <div style={{
+        ...wrap, border: `2.5px solid ${r.color}`, background: '#fff',
+        boxShadow: `0 2px 6px ${r.colorSoft}`,
+      }}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...wrap, border: `2px solid ${r.color}`, background: '#fff' }}>
+      {children}
+    </div>
+  );
+}
+
+// Particles & overlays layered on top of the flower. Intensity scales with rarity tier.
+function QualityFx({ quality, rarity, box = 120 }) {
+  const r = RARITY_META[rarity] || RARITY_META.R;
+  const tier = RARITY_ORDER.indexOf(rarity) + 1;   // 1..5
+  const isRainbow = rarity === 'UR';
+
+  if (quality === 'perfect' || quality === 'great') {
+    const count = quality === 'perfect' ? tier + 2 : tier;   // 3..7 / 1..5
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {Array.from({ length: count }).map((_, i) => (
+          <span key={i} style={{
+            position: 'absolute',
+            left: `${10 + (i * 17) % 80}%`,
+            bottom: `${15 + (i % 2) * 25}%`,
+            fontSize: quality === 'perfect' ? 14 : 11,
+            color: isRainbow ? '#ffd24a' : r.color,
+            animation: `sg-sparkle-float ${2.2 + (i % 3) * 0.4}s ease-out ${i * 0.3}s infinite`,
+            opacity: 0, filter: 'drop-shadow(0 0 3px rgba(255,210,74,0.8))',
+          }}>✦</span>
+        ))}
+        {tier >= 3 && (
+          <div style={{
+            position: 'absolute', inset: '12%', borderRadius: '50%',
+            background: isRainbow
+              ? 'radial-gradient(circle, rgba(255,210,74,0.35) 0%, transparent 60%)'
+              : `radial-gradient(circle, ${r.colorSoft} 0%, transparent 65%)`,
+            animation: 'sg-glow-breath 3.4s ease-in-out infinite', pointerEvents: 'none',
+          }} />
+        )}
+        {tier === 5 && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: RAINBOW_BG, backgroundSize: '200% 200%', opacity: 0.12,
+            mixBlendMode: 'screen', borderRadius: '50%',
+            animation: 'sg-rainbow-rotate 6s linear infinite', pointerEvents: 'none',
+          }} />
+        )}
+      </div>
+    );
+  }
+
+  if (quality === 'wilted' || quality === 'dead') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {[0, 1].map(i => (
+          <span key={i} style={{
+            position: 'absolute',
+            left: `${30 + i * 35}%`, top: '38%',
+            width: 6, height: 10, background: '#7ec4ff', borderRadius: '50%',
+            animation: `sg-tear 2.8s ease-in ${i * 1.3}s infinite`, opacity: 0,
+          }} />
+        ))}
+      </div>
+    );
+  }
+  return null;
+}
+
+// ============ SPIN WHEEL ============
+// Two-phase animation: rarity wheel blinks through 5 tiers and lands on rolled rarity,
+// then species wheel blinks through candidate species and lands on rolled species.
+// On "keep" → locks and calls onDone. On "reroll" → consumes a pull and redraws.
+function SpinWheel({ state, identity, date, setState, onDone }) {
+  const day = state.days[date];
+  const allocated = pullsForDate(state, date);
+  const attempts = day?.spin?.attempts || [];
+  const used = attempts.length;
+  const remaining = allocated - used;
+  const lastAttempt = attempts[attempts.length - 1] || null;
+
+  const [phase, setPhase] = useState(() => lastAttempt ? 'result' : 'intro');
+  // phase: intro | spinning-rarity | spinning-species | result
+  const [cycleIdx, setCycleIdx] = useState(0);
+  const cycleTimerRef = useRef(null);
+
+  // When entering a spinning phase, start the cycle indicator
+  useEffect(() => {
+    if (phase !== 'spinning-rarity' && phase !== 'spinning-species') return;
+    let i = 0;
+    cycleTimerRef.current = setInterval(() => {
+      i++;
+      setCycleIdx(i);
+    }, 100);
+    return () => clearInterval(cycleTimerRef.current);
+  }, [phase]);
+
+  async function startSpin() {
+    if (remaining <= 0) return;
+    setPhase('spinning-rarity');
+    await new Promise(r => setTimeout(r, 1400));
+    setPhase('spinning-species');
+    await new Promise(r => setTimeout(r, 1400));
+    const next = addSpinAttempt(state, date, identity);
+    setState?.(next);
+    setPhase('result');
+  }
+
+  function keep() {
+    const next = keepSpin(state, date);
+    setState?.(next);
+    onDone?.();
+  }
+
+  function reroll() {
+    // Another pull → back to spinning
+    setPhase('spinning-rarity');
+    setTimeout(async () => {
+      await new Promise(r => setTimeout(r, 1200));
+      setPhase('spinning-species');
+      await new Promise(r => setTimeout(r, 1200));
+      const next = addSpinAttempt(state, date, identity);
+      setState?.(next);
+      setPhase('result');
+    }, 200);
+  }
+
+  const tiers = RARITY_ORDER;   // ['R','SR','SSR','SSSR','UR']
+  const highlightRarity = tiers[cycleIdx % tiers.length];
+  const speciesList = lastAttempt ? Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === lastAttempt.rarity) : [];
+  const highlightSpecies = speciesList[cycleIdx % Math.max(1, speciesList.length)] || null;
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 65,
+      background: 'linear-gradient(180deg, #23331f 0%, #3a5030 100%)',
+      color: '#fff', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden',
+    }}>
+      {/* Pull counter top-right */}
+      <div style={{
+        position: 'absolute', top: 24, right: 24,
+        padding: '8px 14px', borderRadius: 14,
+        background: 'rgba(255,255,255,0.12)', border: '1.5px solid rgba(255,255,255,0.3)',
+        font: "700 13px 'Noto Sans SC'",
+      }}>🎟️ 剩余 {Math.max(0, allocated - (phase === 'result' ? used : used))} / {allocated}</div>
+
+      {phase === 'intro' && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🎰</div>
+          <h1 style={{ font: "700 32px 'ZCOOL KuaiLe'", margin: 0 }}>今天运气如何？</h1>
+          <p style={{ font: "500 14px/1.6 'Noto Sans SC'", color: '#cfe3be', marginTop: 12 }}>
+            你有 <b style={{ color: '#ffd24a' }}>{allocated}</b> 次抽卡机会<br/>
+            抽到不喜欢的可以再抽一次，但会消耗一次机会
+          </p>
+          <button onClick={startSpin} style={{
+            marginTop: 30, padding: '16px 38px', borderRadius: 24,
+            border: '3px solid #fff', background: '#ffd24a', color: '#23331f',
+            font: "700 18px 'Noto Sans SC'", boxShadow: '0 4px 0 #fff', cursor: 'pointer',
+          }}>开始抽卡 🌸</button>
+        </div>
+      )}
+
+      {(phase === 'spinning-rarity' || phase === 'spinning-species' || phase === 'result') && (
+        <>
+          {/* Rarity wheel: 5 tiles in a row, one highlighted */}
+          <div style={{
+            display: 'flex', gap: 8, marginBottom: 20,
+            opacity: phase === 'intro' ? 0 : 1, transition: 'opacity 0.3s',
+          }}>
+            {tiers.map(t => {
+              const active = (phase === 'spinning-rarity' && t === highlightRarity) ||
+                             (phase !== 'spinning-rarity' && lastAttempt?.rarity === t);
+              const m = RARITY_META[t];
+              const isRb = t === 'UR';
+              return (
+                <div key={t} style={{
+                  padding: '10px 14px', borderRadius: 12,
+                  background: active ? (isRb ? RAINBOW_LINEAR : m.color) : 'rgba(255,255,255,0.08)',
+                  backgroundSize: isRb && active ? '200% 100%' : undefined,
+                  animation: isRb && active ? 'sg-rainbow 4s linear infinite' : null,
+                  border: active ? '2.5px solid #fff' : '2px solid rgba(255,255,255,0.2)',
+                  color: active ? '#fff' : 'rgba(255,255,255,0.5)',
+                  font: "700 14px 'Noto Sans SC'", transition: 'all 0.12s',
+                  transform: active ? 'scale(1.1)' : 'scale(1)',
+                  boxShadow: active ? `0 0 20px ${isRb ? '#ffd24a' : m.color}` : 'none',
+                }}>{t}</div>
+              );
+            })}
+          </div>
+
+          {/* Species reveal / spinning */}
+          <div style={{ minHeight: 280, display: 'grid', placeItems: 'center' }}>
+            {phase === 'spinning-rarity' && (
+              <div style={{ font: "700 20px 'ZCOOL KuaiLe'", color: '#ffd24a' }}>转动中…</div>
+            )}
+            {phase === 'spinning-species' && highlightSpecies && (
+              <div style={{ textAlign: 'center' }}>
+                <FlowerSVG size={180} species={highlightSpecies} quality="perfect" animate />
+                <div style={{ font: "700 16px 'ZCOOL KuaiLe'", marginTop: 8 }}>
+                  {FLOWERS[highlightSpecies].name}...
+                </div>
+              </div>
+            )}
+            {phase === 'result' && lastAttempt && (
+              <div style={{ textAlign: 'center' }}>
+                <RarityFrame rarity={lastAttempt.rarity} padding={6} radius={22} animate={true}
+                  style={{ marginBottom: 14 }}>
+                  <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+                    <FlowerSVG size={160} species={lastAttempt.speciesId} quality="perfect" animate />
+                    <QualityFx quality="perfect" rarity={lastAttempt.rarity} />
+                  </div>
+                </RarityFrame>
+                <RarityBadge rarity={lastAttempt.rarity} size="lg" />
+                <h2 style={{ font: "700 26px 'ZCOOL KuaiLe'", margin: '10px 0 4px', color: '#fff' }}>
+                  {FLOWERS[lastAttempt.speciesId]?.name}
+                </h2>
+                <p style={{ font: "500 13px 'Noto Sans SC'", color: '#cfe3be', margin: '0 0 18px', maxWidth: 280 }}>
+                  {FLOWERS[lastAttempt.speciesId]?.desc}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Actions (only in result phase) */}
+          {phase === 'result' && (
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={keep} style={{
+                padding: '14px 28px', borderRadius: 18,
+                border: '3px solid #fff', background: '#6ab04c', color: '#fff',
+                font: "700 16px 'Noto Sans SC'", boxShadow: '0 4px 0 rgba(0,0,0,0.3)', cursor: 'pointer',
+              }}>✓ 保留这朵</button>
+              {allocated - used > 0 && (
+                <button onClick={reroll} style={{
+                  padding: '14px 22px', borderRadius: 18,
+                  border: '3px solid #fff', background: 'transparent', color: '#fff',
+                  font: "700 14px 'Noto Sans SC'", cursor: 'pointer',
+                }}>🔄 再抽一次（剩 {allocated - used}）</button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <style>{`
+        @keyframes sg-rainbow { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+        @keyframes sg-rainbow-rotate { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+        @keyframes sg-sheen { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+        @keyframes sg-sparkle-float {
+          0% { opacity: 0; transform: translateY(0) scale(0.5); }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { opacity: 0; transform: translateY(-40px) scale(1.2); }
+        }
+        @keyframes sg-glow-breath {
+          0%,100% { opacity: 0.35; transform: scale(0.95); }
+          50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        @keyframes sg-tear {
+          0% { opacity: 0; transform: translateY(0) scale(0.5); }
+          25% { opacity: 0.9; }
+          100% { opacity: 0; transform: translateY(30px) scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ============ PLANT YESTERDAY'S FLOWER INTO THE FIELD ============
+// Shown once per unplanted past day. Kid picks an empty slot; plantAt is called.
+function PlantYesterday({ state, setState, date, onDone }) {
+  const day = state.days[date];
+  const flower = keptFlowerFor(state, date);
+  if (!flower) { onDone?.(); return null; }
+  const total = totalForDay(day);
+  const quality = qualityFromPacing(total, state.settings.dailyLimit, 1.0);
+  const occupiedSlotIds = new Set(
+    Object.values(state.days).map(d => d.plantedAt?.slotId).filter(Boolean)
+  );
+  const [hoverSlot, setHoverSlot] = useState(null);
+
+  function pickSlot(slotId) {
+    if (occupiedSlotIds.has(slotId)) return;
+    const next = plantAt(state, date, slotId);
+    setState?.(next);
+    onDone?.();
+  }
+
+  const d = parseYMD(date);
+  const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日`;
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 62,
+      background: 'linear-gradient(180deg, #d7e6c6 0%, #b9d89a 100%)',
+      padding: 20, display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ textAlign: 'center', marginTop: 8 }}>
+        <div style={{ font: "500 12px 'Noto Sans SC'", color: '#3b6e2b' }}>{dateLabel} 培育好的花</div>
+        <div style={{ font: "700 22px 'ZCOOL KuaiLe'", color: '#23331f', marginTop: 2 }}>
+          把它种到哪里？
+        </div>
+      </div>
+
+      {/* Preview of the flower to plant */}
+      <div style={{ display: 'grid', placeItems: 'center', margin: '14px 0' }}>
+        <RarityFrame rarity={flower.rarity} padding={4} radius={16}>
+          <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+            <div style={{ position: 'relative', width: 80, height: 80 }}>
+              <FlowerSVG size={80} species={flower.speciesId} quality={quality} animate headOnly />
+              <QualityFx quality={quality} rarity={flower.rarity} />
+            </div>
+            <div>
+              <RarityBadge rarity={flower.rarity} size="sm" />
+              <div style={{ font: "700 14px 'ZCOOL KuaiLe'", marginTop: 4 }}>
+                {FLOWERS[flower.speciesId]?.name}
+              </div>
+            </div>
+          </div>
+        </RarityFrame>
+      </div>
+
+      {/* Field */}
+      <div style={{
+        flex: 1, position: 'relative', margin: '10px 4px',
+        background: 'linear-gradient(180deg, #e8d8b0 0%, #b88d5a 100%)',
+        borderRadius: 24, border: '3px solid #7c6142',
+        boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden',
+      }}>
+        {FIELD_SLOTS.map(slot => {
+          const occ = occupiedSlotIds.has(slot.id);
+          return (
+            <button key={slot.id}
+              disabled={occ}
+              onClick={() => pickSlot(slot.id)}
+              onMouseEnter={() => setHoverSlot(slot.id)}
+              onMouseLeave={() => setHoverSlot(null)}
+              style={{
+                position: 'absolute',
+                left: `${slot.x}%`, top: `${slot.y}%`,
+                width: 32, height: 32, transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                background: occ ? 'transparent' :
+                            hoverSlot === slot.id ? '#ffd24a' : 'rgba(90, 60, 30, 0.35)',
+                border: occ ? 'none' : '2px dashed #5a3a20',
+                cursor: occ ? 'default' : 'pointer',
+                display: 'grid', placeItems: 'center', padding: 0,
+                animation: !occ ? 'sg-pulse-slot 2s ease-in-out infinite' : null,
+                opacity: occ ? 0 : 1,
+              }}>
+              {!occ && <span style={{ fontSize: 14 }}>＋</span>}
+            </button>
+          );
+        })}
+        <style>{`
+          @keyframes sg-pulse-slot {
+            0%,100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+          }
+        `}</style>
+      </div>
+
+      <p style={{ font: "500 11px 'Noto Sans SC'", color: '#23331f', textAlign: 'center', margin: '8px 0 0' }}>
+        点空格把花种下去 🌱
+      </p>
+    </div>
+  );
+}
+
+// ============ FLOWER FIELD (primary garden view) ============
+function FlowerField({ state, onClose, onOpenHistory }) {
+  const plantings = [];
+  for (const date of Object.keys(state.days)) {
+    const d = state.days[date];
+    if (!d.plantedAt?.slotId) continue;
+    const flower = keptFlowerFor(state, date);
+    if (!flower) continue;
+    const quality = qualityFromPacing(totalForDay(d), state.settings.dailyLimit, 1.0);
+    plantings.push({ date, slotId: d.plantedAt.slotId, flower, quality });
+  }
+  const bySlot = {};
+  for (const p of plantings) bySlot[p.slotId] = p;
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 45,
+      background: 'linear-gradient(180deg, #bfe0a5 0%, #e9f1df 100%)',
+      display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '16px 18px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12,
+          border: '2px solid #23331f', background: '#fff', fontSize: 16, cursor: 'pointer', boxShadow: '0 2px 0 #23331f' }}>←</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ font: "700 20px 'ZCOOL KuaiLe'" }}>花田</div>
+          <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>
+            已种 {plantings.length} 朵
+          </div>
+        </div>
+        <button onClick={onOpenHistory} title="历史记录" style={{
+          padding: '8px 12px', borderRadius: 12, border: '2px solid #23331f',
+          background: '#fff', font: "600 12px 'Noto Sans SC'", cursor: 'pointer', boxShadow: '0 2px 0 #23331f',
+        }}>📅 历史</button>
+      </div>
+
+      <div style={{ flex: 1, margin: '4px 14px 14px', position: 'relative',
+        background: 'linear-gradient(180deg, #e8d8b0 0%, #b88d5a 100%)',
+        borderRadius: 24, border: '3px solid #7c6142',
+        boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+        {/* Decorative: grass tufts top */}
+        <svg viewBox="0 0 400 40" preserveAspectRatio="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 30, width: '100%' }}>
+          <path d="M0 40 Q20 10 40 40 Q60 15 80 40 Q100 5 120 40 Q140 18 160 40 Q180 8 200 40 Q220 20 240 40 Q260 10 280 40 Q300 15 320 40 Q340 5 360 40 Q380 18 400 40 Z" fill="#7ab985" />
+        </svg>
+        {/* Slots */}
+        {FIELD_SLOTS.map(slot => {
+          const p = bySlot[slot.id];
+          if (!p) {
+            return (
+              <div key={slot.id} style={{
+                position: 'absolute', left: `${slot.x}%`, top: `${slot.y}%`,
+                width: 22, height: 22, borderRadius: '50%',
+                background: 'rgba(90, 60, 30, 0.2)', transform: 'translate(-50%, -50%)',
+              }} />
+            );
+          }
+          return (
+            <button key={slot.id} onClick={() => setSelected(p)} style={{
+              position: 'absolute', left: `${slot.x}%`, top: `${slot.y}%`,
+              width: 46, height: 56, transform: 'translate(-50%, -60%)',
+              background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+            }}>
+              <PotFlower species={p.flower.speciesId} quality={p.quality} size={42} />
+              {RARITY_ORDER.indexOf(p.flower.rarity) >= 3 && (
+                <div style={{
+                  position: 'absolute', inset: '-6px', borderRadius: '50%',
+                  boxShadow: p.flower.rarity === 'UR'
+                    ? '0 0 12px rgba(255,210,74,0.6)'
+                    : `0 0 8px ${RARITY_META[p.flower.rarity].colorSoft}`,
+                  pointerEvents: 'none',
+                }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {selected && (
+        <div onClick={() => setSelected(null)} style={{
+          position: 'absolute', inset: 0, zIndex: 5,
+          background: 'rgba(35,51,31,0.55)',
+          display: 'grid', placeItems: 'center', padding: 20,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '100%', maxWidth: 320,
+          }}>
+            <RarityFrame rarity={selected.flower.rarity} padding={6} radius={22}>
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+                <FlowerSVG size={140} species={selected.flower.speciesId} quality={selected.quality} animate />
+                <QualityFx quality={selected.quality} rarity={selected.flower.rarity} />
+                <div style={{ marginTop: 8 }}><RarityBadge rarity={selected.flower.rarity} size="md" /></div>
+                <div style={{ font: "700 20px 'ZCOOL KuaiLe'", marginTop: 6 }}>
+                  {FLOWERS[selected.flower.speciesId]?.name}
+                </div>
+                <div style={{ font: "500 12px 'Noto Sans SC'", color: '#5c6d54', marginTop: 2, textAlign: 'center' }}>
+                  {FLOWERS[selected.flower.speciesId]?.desc}
+                </div>
+                <div style={{ font: "500 11px 'Noto Sans SC'", color: '#8a9a85', marginTop: 10 }}>
+                  {(() => { const d = parseYMD(selected.date); return `${d.getMonth() + 1}月${d.getDate()}日 · ${QUALITY_LABEL[selected.quality] || selected.quality}`; })()}
+                </div>
+                <button onClick={() => setSelected(null)} style={{
+                  marginTop: 14, padding: '8px 20px', borderRadius: 14,
+                  border: '2px solid #23331f', background: '#fff',
+                  font: "600 12px 'Noto Sans SC'", cursor: 'pointer',
+                }}>关闭</button>
+              </div>
+            </RarityFrame>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const QUALITY_LABEL = {
+  perfect: '完美', great: '很好', ok: '还行', okish: '勉强', wilted: '蔫了', dead: '枯萎',
+};
+
 // ============ WELCOME / CHOICE (new family vs join) ============
 function WelcomeScreen({ onChoose }) {
   return (
@@ -295,151 +878,10 @@ function JoinFamilyFlow({ inviteFrag, onDone, onBack, busy, errorMsg }) {
   );
 }
 
-// ============ PLANTING CEREMONY (Journey 2) ============
-function PlantingCeremony({ date, flower, newUnlocks, onDone, childName }) {
-  const [phase, setPhase] = useState(0); // 0: intro, 1: hands planting, 2: reveal, 3: unlock if any
-  const [totalLabel, setTotalLabel] = useState('');
-
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase(1), 600),
-      setTimeout(() => setPhase(2), 2100),
-      setTimeout(() => { if (newUnlocks.length > 0) setPhase(3); }, 4200),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  const d = parseYMD(date);
-  const dateStr = `${d.getMonth()+1}月${d.getDate()}日`;
-  const q = flower.quality;
-  const species = flower.speciesId;
-  const msg = q === 'dead' ? `${dateStr} 吃得有点多\n不过明天又是新开始` :
-              q === 'wilted' ? `${dateStr} 的花蔫了一点点\n没关系的` :
-              q === 'okish' ? `${dateStr} 差一点就完美啦` :
-              q === 'ok' ? `${dateStr} 的花开得不错` :
-              q === 'great' ? `${dateStr} 开出了漂亮的花` :
-              `${dateStr} 开出了精神饱满的花！`;
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 60,
-      background: 'linear-gradient(180deg, #d7e6c6 0%, #f3f8ee 55%, #e6dbc5 100%)',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: 24, overflow: 'hidden',
-    }}>
-      {/* Sunlight rays when phase >= 2 */}
-      {phase >= 2 && (
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse at center, rgba(255,224,138,0.35) 0%, transparent 60%)',
-          animation: 'sunPulse 1.4s ease-out',
-        }} />
-      )}
-
-      <div style={{ font: "500 13px 'Noto Sans SC'", color: '#5c6d54', textAlign: 'center' }}>
-        🌤️ 今天是新的一天
-      </div>
-      <div style={{ font: "700 22px 'ZCOOL KuaiLe'", color: '#23331f', marginTop: 4, textAlign: 'center' }}>
-        把昨天的花种进花园
-      </div>
-
-      {/* The scene */}
-      <div style={{ position: 'relative', width: 280, height: 280, marginTop: 24 }}>
-        {/* soil pot */}
-        <svg viewBox="0 0 280 280" width="280" height="280" style={{ position: 'absolute', inset: 0 }}>
-          <path d="M 70 210 L 210 210 L 195 260 L 85 260 Z" fill="#c98a5b" stroke="#7c6142" strokeWidth="4" strokeLinejoin="round" />
-          <rect x="64" y="204" width="152" height="14" rx="2" fill="#a88968" stroke="#7c6142" strokeWidth="3" />
-          <ellipse cx="140" cy="212" rx="66" ry="6" fill="#5a3a20" opacity="0.6" />
-          {/* sparkles */}
-          {phase >= 2 && [[60,80],[220,100],[230,180],[50,160],[180,50]].map(([x,y], i) => (
-            <g key={i} style={{ animation: `sparkle 1.8s ${i*0.15}s ease-out infinite` }}>
-              <polygon points={`${x},${y-5} ${x+1.5},${y-1.5} ${x+5},${y} ${x+1.5},${y+1.5} ${x},${y+5} ${x-1.5},${y+1.5} ${x-5},${y} ${x-1.5},${y-1.5}`} fill="#ffd24a" />
-            </g>
-          ))}
-        </svg>
-
-        {/* hands lowering the flower */}
-        <div style={{
-          position: 'absolute', left: '50%', top: phase >= 2 ? 30 : phase === 1 ? 20 : -120,
-          transform: 'translateX(-50%)',
-          transition: 'top 1.2s cubic-bezier(.4,.2,.2,1), opacity 0.4s',
-          opacity: phase >= 2 ? 1 : phase === 1 ? 1 : 0,
-        }}>
-          <FlowerSVG size={150} species={species} quality={q === 'dead' || q === 'wilted' ? q : q} animate={phase >= 2} />
-        </div>
-      </div>
-
-      {/* Caption */}
-      <div style={{
-        marginTop: 10, padding: '14px 20px',
-        background: '#fff', border: '2px solid #23331f', borderRadius: 18,
-        boxShadow: '0 4px 0 #23331f', maxWidth: 320,
-        opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.5s',
-      }}>
-        <div style={{ font: "700 14px/1.5 'Noto Sans SC'", color: '#23331f', textAlign: 'center', whiteSpace: 'pre-line' }}>
-          {msg}
-        </div>
-        {species && FLOWERS[species] && (
-          <div style={{
-            marginTop: 8, font: "700 13px 'ZCOOL KuaiLe'", textAlign: 'center',
-            color: FLOWERS[species].rarity === 'common' ? '#3b6e2b' :
-                   FLOWERS[species].rarity === 'rare' ? '#b892ff' : '#c2453c',
-          }}>
-            {FLOWERS[species].rarity === 'rare' ? '✨ 稀有花 · ' : FLOWERS[species].rarity === 'unlock' ? '🎖 解锁花 · ' : ''}
-            {FLOWERS[species].name}
-          </div>
-        )}
-      </div>
-
-      {/* Unlock surprise */}
-      {phase >= 3 && newUnlocks.length > 0 && (
-        <div style={{
-          position: 'absolute', inset: 0, background: 'rgba(35,51,31,0.7)',
-          display: 'grid', placeItems: 'center', zIndex: 5,
-          animation: 'fadeIn 0.4s',
-        }}>
-          <div style={{
-            background: '#fffef5', border: '3px solid #23331f', borderRadius: 24,
-            padding: '28px 24px', maxWidth: 300, boxShadow: '0 6px 0 #23331f', textAlign: 'center',
-          }}>
-            <div style={{ font: "700 14px 'Noto Sans SC'", color: '#c2453c', letterSpacing: 1 }}>🎖 新品种解锁</div>
-            <div style={{ margin: '12px 0', display: 'flex', justifyContent: 'center' }}>
-              <FlowerSVG size={120} species={newUnlocks[0]} quality="perfect" animate />
-            </div>
-            <div style={{ font: "700 22px 'ZCOOL KuaiLe'" }}>{FLOWERS[newUnlocks[0]].name}</div>
-            <div style={{ font: "500 12px/1.5 'Noto Sans SC'", color: '#5c6d54', marginTop: 4 }}>
-              {FLOWERS[newUnlocks[0]].desc}
-            </div>
-            <button onClick={onDone} style={{
-              marginTop: 16, padding: '10px 28px', borderRadius: 14,
-              border: '2px solid #23331f', background: '#6ab04c', color: '#fff',
-              font: "700 14px 'Noto Sans SC'", cursor: 'pointer', boxShadow: '0 3px 0 #23331f',
-            }}>太棒啦！进入花园</button>
-          </div>
-        </div>
-      )}
-
-      {/* Continue */}
-      {phase >= 2 && newUnlocks.length === 0 && (
-        <button onClick={onDone} style={{
-          marginTop: 18, padding: '14px 32px', borderRadius: 22,
-          border: '3px solid #23331f', background: '#23331f', color: '#fff',
-          font: "700 16px 'Noto Sans SC'", cursor: 'pointer', boxShadow: '0 4px 0 #101a0e',
-          opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.5s 0.5s',
-        }}>去看今天的花苞 →</button>
-      )}
-
-      <style>{`
-        @keyframes sparkle { 0%,100%{opacity:0;transform:scale(0.5);} 50%{opacity:1;transform:scale(1.2);} }
-        @keyframes sunPulse { 0%{opacity:0;} 60%{opacity:1;} 100%{opacity:0.6;} }
-        @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
-      `}</style>
-    </div>
-  );
-}
+// PlantingCeremony removed (replaced by SpinWheel + PlantYesterday above).
 
 // ============ TODAY SCREEN ============
-function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalendar, onOpenSettings, onOpenTrend, showOverage }) {
+function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField, onOpenSettings, onOpenTrend, onOpenHistory }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000);
@@ -451,26 +893,20 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalend
   const name = state.settings.childName || '小宝贝';
   const day = state.days[date] || { entries: [], schoolSugar: 0 };
   const isSchoolDay = isWeekday(date);
-
-  // Bud state: predict species using current (mid-day) ratio
-  const previewQuality = status.ratio >= 1.3 ? 'dead' :
-                         status.ratio >= 1.0 ? 'wilted' :
-                         status.health === 'wilting' ? 'okish' :
-                         status.health === 'stressed' ? 'ok' :
-                         status.health === 'ok' ? 'great' : 'perfect';
-
-  const healthMsg = status.health === 'thriving' ? `${name}今天状态超好！花苞鼓鼓的～` :
-                   status.health === 'ok' ? `${name}今天吃得刚好，花苞慢慢长` :
-                   status.health === 'stressed' ? '花苞有点担心…稍微省着吃哦' :
-                   status.ratio >= 1.3 ? '呜…今天糖糖太多啦，花蔫了' :
-                   '糖快超标啦，花有点难过';
-
-  const healthColor = status.health === 'thriving' ? '#3b6e2b' :
-                      status.health === 'ok' ? '#6ab04c' :
-                      status.health === 'stressed' ? '#d68c1f' : '#c2453c';
+  const kept = keptFlowerFor(state, date);
+  const quality = status.quality;
+  const healthMsg = quality === 'perfect' ? `${name}今天状态超好！花开得最漂亮` :
+                    quality === 'great'  ? `${name}今天吃得刚刚好` :
+                    quality === 'ok'     ? '花还挺精神的，小心一点哦' :
+                    quality === 'okish'  ? '花头有点歪了，省着点吃' :
+                    quality === 'wilted' ? '花蔫了…喝杯水吧' :
+                                           '花枯了，明天重来';
+  const qualityColor = quality === 'perfect' || quality === 'great' ? '#3b6e2b' :
+                       quality === 'ok' ? '#6ab04c' :
+                       quality === 'okish' ? '#d68c1f' : '#c2453c';
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', paddingBottom: 110,
+    <div style={{ height: '100%', overflowY: 'auto', paddingBottom: 40,
       background: 'linear-gradient(180deg, #f3f8ee 0%, #e9f1df 100%)' }}>
       {/* Sticky header */}
       <div style={{
@@ -491,26 +927,51 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalend
         }}>⚙</button>
       </div>
 
-      {/* Today's bud card */}
-      <div style={{ margin: '8px 18px 0', padding: 20,
-        background: '#fff', border: '2.5px solid #23331f', borderRadius: 24,
-        boxShadow: '0 5px 0 #23331f', display: 'flex', gap: 14, alignItems: 'center' }}>
-        <div style={{ width: 110, height: 154, flexShrink: 0, display: 'grid', placeItems: 'center' }}>
-          <FlowerSVG size={110} species={null} quality="bud" animate />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ font: "700 14px/1.4 'Noto Sans SC'", color: healthColor }}>{healthMsg}</div>
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-            <div style={{ font: "800 34px 'Baloo 2'", color: status.ratio >= 1 ? '#c2453c' : '#23331f', lineHeight: 1 }}>
-              {status.total}
+      {/* Today's kept flower in rarity frame */}
+      {kept ? (
+        <div style={{ margin: '8px 18px 0' }}>
+          <RarityFrame rarity={kept.rarity} padding={6} radius={22}>
+            <div style={{ padding: '16px 16px 18px', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>🌸 今日抽到</div>
+                <RarityBadge rarity={kept.rarity} size="sm" />
+              </div>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <div style={{ position: 'relative', width: 120, height: 140, flexShrink: 0, display: 'grid', placeItems: 'center' }}>
+                  <FlowerSVG size={110} species={kept.speciesId} quality={quality} animate />
+                  <QualityFx quality={quality} rarity={kept.rarity} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ font: "700 18px 'ZCOOL KuaiLe'", color: '#23331f' }}>
+                    {FLOWERS[kept.speciesId]?.name}
+                  </div>
+                  <div style={{ font: "500 11px/1.5 'Noto Sans SC'", color: '#5c6d54', marginTop: 2 }}>
+                    {FLOWERS[kept.speciesId]?.desc}
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <div style={{ font: "800 30px 'Baloo 2'", color: status.ratio >= 1 ? '#c2453c' : '#23331f', lineHeight: 1 }}>
+                      {status.total}
+                    </div>
+                    <div style={{ font: "600 14px 'Baloo 2'", color: '#5c6d54' }}>/{status.limit}g</div>
+                  </div>
+                  <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54', marginTop: 2 }}>
+                    {status.ratio < 1 ? `还能吃 ${Math.round(status.limit - status.total)}g` : `超出 ${Math.round(status.total - status.limit)}g`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ font: "600 13px 'Noto Sans SC'", color: qualityColor, marginTop: 10, textAlign: 'center' }}>
+                {healthMsg} · <span style={{ color: '#8a9a85', fontWeight: 500 }}>{QUALITY_LABEL[quality] || quality}</span>
+              </div>
             </div>
-            <div style={{ font: "600 14px 'Baloo 2'", color: '#5c6d54' }}>/{status.limit}g</div>
-          </div>
-          <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54', marginTop: 2 }}>
-            {status.ratio < 1 ? `还能吃 ${status.limit - status.total}g` : `超出 ${status.total - status.limit}g`}
-          </div>
+          </RarityFrame>
         </div>
-      </div>
+      ) : (
+        <div style={{ margin: '8px 18px 0', padding: 20,
+          background: '#fff', border: '2px dashed #cfe3be', borderRadius: 20, textAlign: 'center',
+          font: "500 13px 'Noto Sans SC'", color: '#5c6d54' }}>
+          还没有今日的花，等会儿会自动开始抽卡 ✨
+        </div>
+      )}
 
       {/* Progress bar with 3 segments */}
       <div style={{ margin: '14px 18px 0' }}>
@@ -523,7 +984,7 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalend
         <SchoolCard date={date} isSchoolDay={isSchoolDay} day={day} onClick={onOpenSchool} />
       </div>
 
-      {/* Quick-add */}
+      {/* Quick-add + nav */}
       <div style={{ margin: '14px 18px 0', display: 'flex', gap: 10 }}>
         <button onClick={onOpenPicker} style={{
           flex: 1, padding: '14px 16px', borderRadius: 18,
@@ -534,12 +995,12 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalend
         }}>
           <span style={{ fontSize: 20 }}>🍭</span> 记一笔
         </button>
-        <button onClick={onOpenCalendar} style={{
+        <button onClick={onOpenField} title="花田" style={{
           width: 56, padding: '14px 0', borderRadius: 18,
           border: '2.5px solid #23331f', background: '#fff',
           fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 0 #23331f',
         }}>🌻</button>
-        <button onClick={onOpenTrend} style={{
+        <button onClick={onOpenTrend} title="趋势" style={{
           width: 56, padding: '14px 0', borderRadius: 18,
           border: '2.5px solid #23331f', background: '#fff',
           fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 0 #23331f',
@@ -547,12 +1008,14 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenCalend
       </div>
 
       {/* Today log */}
-      <div style={{ margin: '18px 18px 0' }}>
+      <div style={{ margin: '18px 18px 18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
           <div style={{ font: "700 15px 'ZCOOL KuaiLe'", color: '#23331f' }}>今天的糖糖日记</div>
-          <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>{day.entries.length} 条</div>
+          <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>
+            {day.entries.filter(e => !e.deleted).length} 条
+          </div>
         </div>
-        <EntryList entries={day.entries} onDelete={(id) => setState(s => removeEntry(s, date, id))} />
+        <EntryList entries={day.entries.filter(e => !e.deleted)} onDelete={(id) => setState(s => removeEntry(s, date, id))} />
       </div>
     </div>
   );
@@ -863,40 +1326,35 @@ function OverageModal({ open, onClose, total, limit, name }) {
 }
 
 // ============ CALENDAR (Journey 6) ============
-function CalendarScreen({ state, setState, onClose, onPickDate }) {
+// ============ HISTORY (per-date record, read-only) ============
+// Replaces the old CalendarScreen. Month view; each cell shows the kept flower
+// (if any) + its rarity border.
+function HistoryScreen({ state, onClose, onPickDate }) {
   const [refDate, setRefDate] = useState(new Date());
   const month = monthData(state, refDate);
   const monthNames = ['一','二','三','四','五','六','七','八','九','十','十一','十二'];
   const dows = ['一','二','三','四','五','六','日'];
   const todayKey = ymd(new Date());
 
-  // Count rare & unlocks in this month
   const stats = useMemo(() => {
-    let common = 0, rare = 0, unlock = 0, wilted = 0;
+    const counts = { R: 0, SR: 0, SSR: 0, SSSR: 0, UR: 0 };
     for (const c of month.cells) {
-      if (!c || !c.data || !c.data.flower) continue;
-      const sp = c.data.flower.speciesId;
-      const q = c.data.flower.quality;
-      if (q === 'wilted' || q === 'dead') wilted++;
-      else if (sp && FLOWERS[sp]) {
-        if (FLOWERS[sp].rarity === 'rare') rare++;
-        else if (FLOWERS[sp].rarity === 'unlock') unlock++;
-        else common++;
-      }
+      if (!c || !c.data) continue;
+      const kept = keptFlowerFor(state, c.date);
+      if (kept) counts[kept.rarity] = (counts[kept.rarity] || 0) + 1;
     }
-    return { common, rare, unlock, wilted };
-  }, [month]);
+    return counts;
+  }, [month, state]);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 45,
       background: 'linear-gradient(180deg, #f3f8ee 0%, #e0e9d0 100%)',
       display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
       <div style={{ padding: '16px 18px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12,
           border: '2px solid #23331f', background: '#fff', fontSize: 16, cursor: 'pointer', boxShadow: '0 2px 0 #23331f' }}>←</button>
         <div style={{ flex: 1 }}>
-          <div style={{ font: "700 20px 'ZCOOL KuaiLe'", color: '#23331f' }}>我的花园</div>
+          <div style={{ font: "700 20px 'ZCOOL KuaiLe'", color: '#23331f' }}>历史记录</div>
         </div>
         <button onClick={() => setRefDate(d => { const n = new Date(d); n.setMonth(n.getMonth() - 1); return n; })}
           style={{ width: 32, height: 32, borderRadius: 10, border: '2px solid #23331f', background: '#fff', cursor: 'pointer', boxShadow: '0 2px 0 #23331f' }}>‹</button>
@@ -905,15 +1363,19 @@ function CalendarScreen({ state, setState, onClose, onPickDate }) {
           style={{ width: 32, height: 32, borderRadius: 10, border: '2px solid #23331f', background: '#fff', cursor: 'pointer', boxShadow: '0 2px 0 #23331f' }}>›</button>
       </div>
 
-      {/* Legend */}
+      {/* Rarity counts */}
       <div style={{ padding: '0 18px', display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-        <LegendPill color="#6ab04c" label={`${stats.common} 朵`} />
-        {stats.rare > 0 && <LegendPill color="#b892ff" label={`✨${stats.rare}`} />}
-        {stats.unlock > 0 && <LegendPill color="#c2453c" label={`🎖${stats.unlock}`} />}
-        {stats.wilted > 0 && <LegendPill color="#8a9a85" label={`蔫 ${stats.wilted}`} />}
+        {RARITY_ORDER.map(r => stats[r] > 0 && (
+          <div key={r} style={{
+            padding: '4px 10px', borderRadius: 999,
+            background: r === 'UR' ? RAINBOW_LINEAR : RARITY_META[r].color,
+            backgroundSize: r === 'UR' ? '200% 100%' : undefined,
+            animation: r === 'UR' ? 'sg-rainbow 4s linear infinite' : null,
+            color: '#fff', font: "700 11px 'Noto Sans SC'",
+          }}>{r} × {stats[r]}</div>
+        ))}
       </div>
 
-      {/* Calendar grid */}
       <div style={{ flex: 1, padding: '8px 14px 20px', overflowY: 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 6 }}>
           {dows.map(d => <div key={d} style={{ textAlign: 'center', font: "600 10px 'Noto Sans SC'", color: '#5c6d54' }}>{d}</div>)}
@@ -924,25 +1386,28 @@ function CalendarScreen({ state, setState, onClose, onPickDate }) {
             const isToday = c.date === todayKey;
             const isPast = c.date < todayKey;
             const isFuture = c.date > todayKey;
-            const flower = c.data?.flower;
+            const kept = c.data ? keptFlowerFor(state, c.date) : null;
             const total = c.data ? totalForDay(c.data) : 0;
-            const rare = flower?.speciesId && FLOWERS[flower.speciesId]?.rarity !== 'common';
+            const q = c.data ? qualityFromPacing(total, state.settings.dailyLimit, isPast || isToday ? 1.0 : 0.05) : null;
+            const borderColor = kept ? (kept.rarity === 'UR' ? '#ffd24a' : RARITY_META[kept.rarity].color) :
+                                isToday ? '#ffd24a' : '#e0e6d5';
             return (
               <button key={i} onClick={() => (isPast || isToday) && c.data && onPickDate(c.date)}
                 style={{
-                  position: 'relative',
-                  aspectRatio: '0.82', padding: 2,
+                  position: 'relative', aspectRatio: '0.82', padding: 2,
                   background: isToday ? '#fff9dc' : isPast ? '#fffef5' : '#f3f8ee',
-                  border: isToday ? '2.5px solid #ffd24a' : rare ? '2px solid #b892ff' : '1.5px solid #e0e6d5',
+                  border: `${kept ? '2.5px' : '1.5px'} solid ${borderColor}`,
                   borderRadius: 12, cursor: (isPast || isToday) && c.data ? 'pointer' : 'default',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
                   paddingTop: 3, paddingBottom: 3,
+                  boxShadow: kept && RARITY_ORDER.indexOf(kept.rarity) >= 3
+                    ? `0 0 8px ${kept.rarity === 'UR' ? 'rgba(255,210,74,0.6)' : RARITY_META[kept.rarity].colorSoft}`
+                    : 'none',
                 }}>
                 <div style={{ font: "700 10px 'Baloo 2'", color: isToday ? '#c2453c' : isFuture ? '#8a9a85' : '#23331f' }}>{c.day}</div>
                 <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
                   {isFuture ? <EmptyPot size={28} /> :
-                   isToday ? <BudGrowing size={32} style={{ width: 32, height: 37 }} /> :
-                   c.data && flower ? <PotFlower species={flower.speciesId} quality={flower.quality} size={30} /> :
+                   kept ? <PotFlower species={kept.speciesId} quality={q} size={30} /> :
                    <EmptyPot size={28} />}
                 </div>
                 {c.data && !isFuture && (
@@ -954,32 +1419,7 @@ function CalendarScreen({ state, setState, onClose, onPickDate }) {
             );
           })}
         </div>
-
-        {/* Unlock gallery */}
-        {state.unlockedUnlocks.length > 0 && (
-          <div style={{ marginTop: 20, padding: 14, background: '#fff', border: '2px solid #cfe3be', borderRadius: 16 }}>
-            <div style={{ font: "700 14px 'ZCOOL KuaiLe'", marginBottom: 10 }}>🎖 解锁图鉴</div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {state.unlockedUnlocks.map(k => (
-                <div key={k} style={{ textAlign: 'center' }}>
-                  <FlowerSVG size={54} species={k} quality="perfect" />
-                  <div style={{ font: "600 10px 'Noto Sans SC'", marginTop: 2 }}>{FLOWERS[k].name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-function LegendPill({ color, label }) {
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '4px 10px', background: '#fff', border: `1.5px solid ${color}`,
-      borderRadius: 999, font: "600 11px 'Noto Sans SC'", color: '#23331f' }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
-      {label}
     </div>
   );
 }
@@ -989,10 +1429,12 @@ function DayDetail({ date, state, onClose }) {
   const day = state.days[date];
   if (!day) return null;
   const d = parseYMD(date);
-  const flower = day.flower;
-  const species = flower?.speciesId;
-  const q = flower?.quality || 'ok';
+  const kept = keptFlowerFor(state, date);
   const total = totalForDay(day);
+  const isPast = date < ymd(new Date());
+  const q = qualityFromPacing(total, state.settings.dailyLimit, isPast ? 1.0 : expectedProgress(new Date()));
+  const liveEntries = day.entries.filter(e => !e.deleted);
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 48,
       background: 'linear-gradient(180deg, #f3f8ee 0%, #e0e9d0 100%)',
@@ -1004,30 +1446,33 @@ function DayDetail({ date, state, onClose }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px 24px' }}>
-        <div style={{
-          background: '#fff', border: '2.5px solid #23331f', borderRadius: 22,
-          padding: 20, boxShadow: '0 5px 0 #23331f', textAlign: 'center',
-        }}>
-          <div style={{ display: 'grid', placeItems: 'center' }}>
-            <FlowerSVG size={140} species={species} quality={q} animate />
-          </div>
-          <div style={{ font: "700 22px 'ZCOOL KuaiLe'", marginTop: 4,
-            color: q === 'dead' || q === 'wilted' ? '#c2453c' :
-                  species && FLOWERS[species]?.rarity === 'rare' ? '#b892ff' :
-                  species && FLOWERS[species]?.rarity === 'unlock' ? '#c2453c' : '#3b6e2b' }}>
-            {species ? FLOWERS[species].name : q === 'dead' ? '花枯萎了' : '花蔫了'}
-          </div>
-          {species && FLOWERS[species].desc && (
-            <div style={{ font: "500 12px 'Noto Sans SC'", color: '#5c6d54', marginTop: 4 }}>
-              {FLOWERS[species].desc}
+        {kept ? (
+          <RarityFrame rarity={kept.rarity} padding={6} radius={22}>
+            <div style={{ padding: 20, textAlign: 'center', position: 'relative' }}>
+              <div style={{ marginBottom: 8 }}><RarityBadge rarity={kept.rarity} size="md" /></div>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <FlowerSVG size={140} species={kept.speciesId} quality={q} animate />
+                <QualityFx quality={q} rarity={kept.rarity} />
+              </div>
+              <div style={{ font: "700 22px 'ZCOOL KuaiLe'", marginTop: 4, color: '#23331f' }}>
+                {FLOWERS[kept.speciesId]?.name}
+              </div>
+              <div style={{ font: "500 12px 'Noto Sans SC'", color: '#5c6d54', marginTop: 4 }}>
+                {FLOWERS[kept.speciesId]?.desc} · <span style={{ color: '#8a9a85' }}>{QUALITY_LABEL[q] || q}</span>
+              </div>
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 20 }}>
+                <Stat label="总糖分" value={`${total}g`} color={total > state.settings.dailyLimit ? '#c2453c' : '#3b6e2b'} />
+                <Stat label="上限" value={`${state.settings.dailyLimit}g`} color="#5c6d54" />
+                <Stat label="记录" value={`${liveEntries.length} 条`} color="#5c6d54" />
+              </div>
             </div>
-          )}
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 20 }}>
-            <Stat label="总糖分" value={`${total}g`} color={total > state.settings.dailyLimit ? '#c2453c' : '#3b6e2b'} />
-            <Stat label="上限" value={`${state.settings.dailyLimit}g`} color="#5c6d54" />
-            <Stat label="记录" value={`${day.entries.length} 条`} color="#5c6d54" />
+          </RarityFrame>
+        ) : (
+          <div style={{ background: '#fff', border: '2px dashed #cfe3be', borderRadius: 20, padding: 20, textAlign: 'center',
+            font: "500 13px 'Noto Sans SC'", color: '#5c6d54' }}>
+            这一天没有抽过花
           </div>
-        </div>
+        )}
 
         <div style={{ marginTop: 16 }}>
           <div style={{ font: "700 14px 'ZCOOL KuaiLe'", marginBottom: 8, color: '#23331f' }}>这一天吃了什么</div>
@@ -1042,7 +1487,7 @@ function DayDetail({ date, state, onClose }) {
               <div style={{ font: "800 15px 'Baloo 2'", color: '#b892ff' }}>{day.schoolSugar}g</div>
             </div>
           )}
-          <EntryList entries={day.entries} onDelete={() => {}} />
+          <EntryList entries={liveEntries} onDelete={() => {}} />
         </div>
       </div>
     </div>
@@ -1110,7 +1555,7 @@ function TrendScreen({ state, onClose }) {
         <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
           <SummaryCard label="日均" value={`${Math.round(avg)}g`} color="#3b6e2b" />
           <SummaryCard label="达标天数" value={`${days.filter(d => d.total <= d.limit).length}/7`} color="#6ab04c" />
-          <SummaryCard label="连续" value={`${computeStreak(state, ymd(new Date()))} 天`} color="#b892ff" />
+          <SummaryCard label="完美日" value={`${days.filter(d => d.total <= d.limit * 0.4).length}`} color="#b892ff" />
         </div>
       </div>
     </div>
@@ -1223,13 +1668,21 @@ function SettingsScreen({ state, setState, onClose, identity, onRotateToken, onL
         </div>
 
         {/* Stats */}
-        <div style={{ marginTop: 20, padding: 16, background: '#fff', border: '2px dashed #e0e6d5', borderRadius: 16 }}>
-          <div style={{ font: "700 13px 'Noto Sans SC'", color: '#23331f' }}>📊 我的花园</div>
-          <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54', marginTop: 4, lineHeight: 1.6 }}>
-            已种花 {Object.values(state.days).filter(d => d.planted && d.flower && d.flower.speciesId).length} 朵<br/>
-            解锁花种 {state.unlockedUnlocks.length} / 3
-          </div>
-        </div>
+        {(() => {
+          const plantedCount = Object.values(state.days).filter(d => d.plantedAt?.slotId).length;
+          const spunCount = Object.values(state.days).filter(d => d.spin?.keptIndex != null).length;
+          const collected = new Set(Object.values(state.days).map(d => keptFlowerFor(state, d.date)?.speciesId).filter(Boolean));
+          const totalSpecies = Object.keys(FLOWERS).length;
+          return (
+            <div style={{ marginTop: 20, padding: 16, background: '#fff', border: '2px dashed #e0e6d5', borderRadius: 16 }}>
+              <div style={{ font: "700 13px 'Noto Sans SC'", color: '#23331f' }}>📊 我的花园</div>
+              <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54', marginTop: 4, lineHeight: 1.6 }}>
+                已种 {plantedCount} 朵 · 总共抽过 {spunCount} 次<br/>
+                收集花种 {collected.size} / {totalSpecies}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Danger zone */}
         <div style={{ marginTop: 20, padding: 14, border: '2px dashed #c2453c', borderRadius: 14, background: '#fff9f6' }}>
@@ -1300,7 +1753,10 @@ function Field({ label, children }) {
 
 Object.assign(window, {
   WelcomeScreen, NewFamilyOnboarding, JoinFamilyFlow,
-  PlantingCeremony, TodayScreen, FoodPicker,
-  SchoolSheet, OverageModal, CalendarScreen, DayDetail, TrendScreen, SettingsScreen,
+  TodayScreen, FoodPicker,
+  SchoolSheet, OverageModal, HistoryScreen, DayDetail, TrendScreen, SettingsScreen,
+  SpinWheel, PlantYesterday, FlowerField,
+  RarityFrame, RarityBadge, StarRating, QualityFx,
+  QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR,
   EntryList,
 });

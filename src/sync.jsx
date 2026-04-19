@@ -155,6 +155,9 @@ const api = {
   async putSchoolSugar(token, memberId, date, sugar) {
     return apiFetch('/school-sugar', { method: 'PUT', headers: authHeaders(token, memberId), body: JSON.stringify({ date, sugar }) });
   },
+  async putDayState(token, memberId, date, payload) {
+    return apiFetch('/day-state', { method: 'PUT', headers: authHeaders(token, memberId), body: JSON.stringify({ date, ...payload }) });
+  },
 };
 
 // ---------- high-level flows ----------
@@ -226,6 +229,7 @@ async function syncAll(state, identity, { onState } = {}) {
     const data = await api.sync(identity.token, identity.memberId, since);
     if (data.entries?.length) { cur = mergeServerEntries(cur, data.entries); touched = true; }
     if (data.schoolSugar?.length) { cur = mergeServerSchoolSugar(cur, data.schoolSugar); touched = true; }
+    if (data.dayState?.length) { cur = mergeServerDayState(cur, data.dayState); touched = true; }
     const serverNow = Number(data.now) || Date.now();
     cur = { ...cur, lastSyncAt: serverNow };
     saveState(cur);
@@ -265,6 +269,29 @@ async function flushPending(state, identity, { onState } = {}) {
       try {
         await api.putSchoolSugar(identity.token, identity.memberId, date, day.schoolSugar || 0);
         cur = markSchoolSynced(cur, date);
+        onState?.(cur);
+      } catch (e) { if (e.status === 401) return cur; }
+    }
+
+    // day state (spin / planted)
+    if (day._spinPending || day._plantPending) {
+      try {
+        const payload = {};
+        if (day._spinPending && day.spin) {
+          payload.spinJson = JSON.stringify({
+            attempts: day.spin.attempts,
+            keptIndex: day.spin.keptIndex,
+            pullsAllocated: day.spin.pullsAllocated,
+          });
+        }
+        if (day._plantPending && day.plantedAt) {
+          payload.plantedSlot = day.plantedAt.slotId;
+          payload.plantedAt = day.plantedAt.ts;
+        }
+        if (Object.keys(payload).length) {
+          await api.putDayState(identity.token, identity.memberId, date, payload);
+        }
+        cur = markDayStateSynced(cur, date);
         onState?.(cur);
       } catch (e) { if (e.status === 401) return cur; }
     }

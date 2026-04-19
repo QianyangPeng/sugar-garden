@@ -1,9 +1,13 @@
 // Data layer: food library, flowers, state, calculations.
-// Adapted from design handoff. Changes vs original:
-//  - Flower RNG seeded by familyId (not childName) so all family members agree.
-//  - LS key namespaced to 'sg:state'; identity lives in 'sg:identity'.
-//  - Added updatedAt tracking on entries + schoolSugar for incremental sync.
-//  - Added merge helpers for inbound server data.
+//
+// v2 model (gacha + pacing):
+//  - Flowers grouped into 5 rarity tiers: R / SR / SSR / SSSR / UR
+//  - Each new day the kid spins a wheel (rarity then species). Result is deterministic
+//    per family+date+pullIndex, so family members see the same rolls.
+//  - Today's quality is derived LIVE from pacing (sugar vs time elapsed). Can recover
+//    during the day if the kid stops eating. Locks at midnight (time_fraction = 1).
+//  - Yesterday's final flower gets planted into a free-play flower field the next day.
+//  - Pulls-per-day depends on yesterday's final quality (rewards good days).
 
 // -------- Food library (24 items, 4 categories) --------
 const FOOD_LIBRARY = [
@@ -40,60 +44,133 @@ const CATEGORY_META = {
   bakery: { name: '烘焙', color: '#ffd24a' },
 };
 
-// -------- Flower species --------
-const FLOWERS = {
-  'c-tulip':     { name: '郁金香', rarity: 'common', petal: '#ff9ec4', center: '#ffd24a', shape: 'tulip' },
-  'c-daisy':     { name: '雏菊',   rarity: 'common', petal: '#f2e9ff', center: '#ffd24a', shape: 'daisy' },
-  'c-sunflower': { name: '向日葵', rarity: 'common', petal: '#ffd24a', center: '#7c4a1d', shape: 'sunflower' },
-  'c-poppy':     { name: '罂粟',   rarity: 'common', petal: '#ff5c6c', center: '#2b2033', shape: 'poppy' },
-  'c-cosmos':    { name: '波斯菊', rarity: 'common', petal: '#b892ff', center: '#ffd24a', shape: 'cosmos' },
-  'c-marigold':  { name: '万寿菊', rarity: 'common', petal: '#ffb085', center: '#c2453c', shape: 'marigold' },
-  'c-bluebell':  { name: '风铃草', rarity: 'common', petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell' },
-  'c-pansy':     { name: '三色堇', rarity: 'common', petal: '#b892ff', center: '#ffd24a', shape: 'pansy' },
-  'r-moonflower':  { name: '月光花', rarity: 'rare', petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower', desc: '只在糖分很少的夜晚开放' },
-  'r-crystalrose': { name: '水晶玫瑰', rarity: 'rare', petal: '#a0e7f0', center: '#ffffff', shape: 'crystalrose', desc: '晶莹剔透的梦想之花' },
-  'r-rainbowlily': { name: '彩虹百合', rarity: 'rare', petal: 'rainbow', center: '#ffd24a', shape: 'rainbowlily', desc: '承载着今天的好心情' },
-  'r-stardust':    { name: '星砂花', rarity: 'rare', petal: '#2b2058', center: '#ffd24a', shape: 'stardust', desc: '花瓣上带着星星' },
-  'r-honeybee':    { name: '蜂蜜花', rarity: 'rare', petal: '#ffd24a', center: '#7c4a1d', shape: 'honeybee', desc: '小蜜蜂最爱的花' },
-  'u-emerald':  { name: '翡翠花', rarity: 'unlock', petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',  desc: '连续 3 天达标解锁', unlockStreak: 3 },
-  'u-sakura':   { name: '樱花',   rarity: 'unlock', petal: '#ffc7d8', center: '#ffffff', shape: 'sakura',   desc: '连续 5 天达标解锁', unlockStreak: 5 },
-  'u-phoenix':  { name: '凤凰花', rarity: 'unlock', petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',  desc: '连续 7 天达标解锁', unlockStreak: 7 },
+// -------- Rarity tiers --------
+// colors shown as CSS — 'rainbow' is special-cased in components.
+const RARITY_META = {
+  R:    { stars: 1, label: '普通', color: '#6ab04c', colorSoft: '#c8e6b6', colorFaint: '#eaf4e0', stroke: '#3b6e2b' },
+  SR:   { stars: 2, label: '稀有', color: '#3b9cf5', colorSoft: '#a9d3f9', colorFaint: '#e6f1fb', stroke: '#1c6fc2' },
+  SSR:  { stars: 3, label: '超稀', color: '#a259e0', colorSoft: '#d8b8f0', colorFaint: '#f0e4fa', stroke: '#6f2bb5' },
+  SSSR: { stars: 4, label: '极稀', color: '#ff9420', colorSoft: '#ffcf91', colorFaint: '#fff0dd', stroke: '#c86f00' },
+  UR:   { stars: 5, label: '传说', color: 'rainbow', colorSoft: '#ffffff', colorFaint: '#fff',    stroke: '#2b2033' },
+};
+const RARITY_ORDER = ['R', 'SR', 'SSR', 'SSSR', 'UR'];
+
+// Per-pull probabilities. Each pull is an independent roll with these weights.
+// Summed = 1.0. User can tune these in one place.
+const RARITY_PROB = {
+  R:    0.50,
+  SR:   0.30,
+  SSR:  0.15,
+  SSSR: 0.04,
+  UR:   0.01,
 };
 
-function qualityFromRatio(r) {
-  if (r >= 1.3) return 'dead';
-  if (r >= 1.0) return 'wilted';
-  if (r >= 0.9) return 'okish';
-  if (r >= 0.7) return 'ok';
-  if (r >= 0.4) return 'great';
+// Pulls allocated to today, based on yesterday's final quality.
+// More pulls => better expected outcome under option-ii (keep or reroll each time).
+const PULLS_FOR_QUALITY = {
+  perfect: 5,
+  great:   4,
+  ok:      3,
+  okish:   2,
+  wilted:  2,
+  dead:    1,
+};
+const DEFAULT_PULLS = 3;
+
+// -------- Flower species (20 total across 5 tiers) --------
+const FLOWERS = {
+  // R (8) — 基础花，每天大概率抽到
+  'c-tulip':      { name: '郁金香',   rarity: 'R',    petal: '#ff9ec4', center: '#ffd24a', shape: 'tulip',     desc: '经典合抱五瓣' },
+  'c-daisy':      { name: '雏菊',     rarity: 'R',    petal: '#f2e9ff', center: '#ffd24a', shape: 'daisy',     desc: '淡紫白八瓣' },
+  'c-sunflower':  { name: '向日葵',   rarity: 'R',    petal: '#ffd24a', center: '#7c4a1d', shape: 'sunflower', desc: '金黄十二瓣' },
+  'c-poppy':      { name: '罂粟',     rarity: 'R',    petal: '#ff5c6c', center: '#2b2033', shape: 'poppy',     desc: '朱红五瓣' },
+  'c-cosmos':     { name: '波斯菊',   rarity: 'R',    petal: '#b892ff', center: '#ffd24a', shape: 'cosmos',    desc: '粉紫六瓣' },
+  'c-marigold':   { name: '万寿菊',   rarity: 'R',    petal: '#ffb085', center: '#c2453c', shape: 'marigold',  desc: '橙红双层' },
+  'c-bluebell':   { name: '风铃草',   rarity: 'R',    petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell',  desc: '蓝色钟铃' },
+  'c-pansy':      { name: '三色堇',   rarity: 'R',    petal: '#b892ff', center: '#ffd24a', shape: 'pansy',     desc: '紫黄三色' },
+
+  // SR (3) — 蓝色
+  'u-emerald':    { name: '翡翠花',   rarity: 'SR',   petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',   desc: '翠绿菱形，坚毅绽放' },
+  'r-honeybee':   { name: '蜂蜜花',   rarity: 'SR',   petal: '#ffd24a', center: '#7c4a1d', shape: 'honeybee',  desc: '小蜜蜂最爱的花' },
+  'r-crystalrose':{ name: '水晶玫瑰', rarity: 'SR',   petal: '#a0e7f0', center: '#ffffff', shape: 'crystalrose',desc: '晶莹剔透的梦想之花' },
+
+  // SSR (3) — 紫色
+  'r-moonflower': { name: '月光花',   rarity: 'SSR',  petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower',desc: '只在糖分很少的夜晚开放' },
+  'r-stardust':   { name: '星砂花',   rarity: 'SSR',  petal: '#2b2058', center: '#ffd24a', shape: 'stardust',  desc: '花瓣上带着星星' },
+  'u-sakura':     { name: '樱花',     rarity: 'SSR',  petal: '#ffc7d8', center: '#ffffff', shape: 'sakura',    desc: '温柔的粉色五瓣' },
+
+  // SSSR (2) — 橙色
+  'r-rainbowlily':{ name: '彩虹百合', rarity: 'SSSR', petal: 'rainbow', center: '#ffd24a', shape: 'rainbowlily',desc: '承载着今天的好心情' },
+  'u-phoenix':    { name: '凤凰花',   rarity: 'SSSR', petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',   desc: '展翅火红的传说' },
+
+  // UR (2) — 彩虹色
+  'ur-starlight': { name: '星光花',   rarity: 'UR',   petal: '#ffd24a', center: '#fff5a0', shape: 'starlight', desc: '传说中只在完美的日子绽放' },
+  'ur-crystal':   { name: '琉璃花',   rarity: 'UR',   petal: '#ffffff', center: '#ffd24a', shape: 'crystal',   desc: '折射出所有颜色的水晶花' },
+};
+
+// -------- Flower roll (gacha) --------
+// Deterministic given (familyId, date, pullIndex).
+function rollRarity(seed) {
+  const r = mulberry32(seed)();
+  let cumulative = 0;
+  for (const tier of RARITY_ORDER) {
+    cumulative += RARITY_PROB[tier];
+    if (r < cumulative) return tier;
+  }
+  return 'R';
+}
+function rollSpecies(seed, rarity) {
+  const list = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === rarity);
+  if (!list.length) return null;
+  const pick = Math.floor(mulberry32(seed + 1)() * list.length);
+  return list[pick];
+}
+// Composite: given familyId + date + pullIndex, produce a reproducible {rarity, speciesId}.
+function rollFlower(familyId, date, pullIndex) {
+  const seed = hashStr(`${familyId}:${date}:${pullIndex}:rarity`);
+  const rarity = rollRarity(seed);
+  const speciesSeed = hashStr(`${familyId}:${date}:${pullIndex}:${rarity}`);
+  const speciesId = rollSpecies(speciesSeed, rarity);
+  return { rarity, speciesId, pullIndex };
+}
+
+// -------- Pacing-based quality --------
+// quality = f(totalSugar, limit, expected(time_fraction))
+//   target = max(0.05, expected)
+//   pacingRatio = totalSugar / (limit * target)
+// Stronger early-eating penalty; recovers if kid stops.
+function qualityFromPacing(totalSugar, limit, expected) {
+  const target = Math.max(0.05, expected);
+  const pacing = totalSugar / (limit * target);
+  if (pacing >= 1.8) return 'dead';
+  if (pacing >= 1.3) return 'wilted';
+  if (pacing >= 1.0) return 'okish';
+  if (pacing >= 0.7) return 'ok';
+  if (pacing >= 0.4) return 'great';
   return 'perfect';
 }
 
-function pickFlowerForDay({ ratio, dateStr, unlockedUnlocks, streakToday, seed }) {
-  const q = qualityFromRatio(ratio);
-  if (q === 'dead' || q === 'wilted') return { speciesId: null, quality: q };
+// Quality tier for a given date. For today, uses current time-of-day.
+// For any past date, expected = 1.0 (end of day) so pacing = absolute ratio.
+function qualityForDay(state, date, atTime) {
+  const day = state.days[date];
+  if (!day) return null;
+  const total = totalForDay(day);
+  const today = ymd(atTime || new Date());
+  const expected = date === today ? expectedProgress(atTime || new Date()) : 1.0;
+  return qualityFromPacing(total, state.settings.dailyLimit, expected);
+}
 
-  const rng = mulberry32(hashStr(dateStr + '-' + (seed || 'x')));
-
-  if (ratio < 0.5) {
-    if (rng() < 0.18) {
-      const rares = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === 'rare');
-      const pick = rares[Math.floor(rng() * rares.length)];
-      return { speciesId: pick, quality: q };
-    }
-  }
-
-  if (streakToday >= 3) {
-    const u = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === 'unlock');
-    const eligible = u.filter(k => streakToday >= FLOWERS[k].unlockStreak);
-    if (eligible.length && rng() < 0.5) {
-      return { speciesId: eligible[eligible.length - 1], quality: q };
-    }
-  }
-
-  const commons = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === 'common');
-  const pick = commons[Math.floor(rng() * commons.length)];
-  return { speciesId: pick, quality: q };
+// Pulls allocated today, based on yesterday's final quality (if any).
+function pullsForDate(state, date) {
+  const d = parseYMD(date);
+  d.setDate(d.getDate() - 1);
+  const yesterday = ymd(d);
+  const yestDay = state.days[yesterday];
+  if (!yestDay || !yestDay.spin || yestDay.spin.keptIndex == null) return DEFAULT_PULLS;
+  const total = totalForDay(yestDay);
+  const q = qualityFromPacing(total, state.settings.dailyLimit, 1.0);
+  return PULLS_FOR_QUALITY[q] || DEFAULT_PULLS;
 }
 
 function hashStr(s) {
@@ -150,6 +227,24 @@ function expectedProgress(now) {
   return (h - DAY_START_HOUR) / (DAY_END_HOUR - DAY_START_HOUR);
 }
 
+// -------- Flower field (garden) layout --------
+// 48 slots in an irregular hexagonal-ish grid. Rendered as offset rows.
+// Coordinates are relative percentages so CSS can absolute-position without math.
+function buildFieldSlots() {
+  const slots = [];
+  // 6 rows × 8 cols with slight stagger for a more organic look
+  for (let row = 0; row < 6; row++) {
+    for (let col = 0; col < 8; col++) {
+      const id = `${row}-${col}`;
+      const x = 6 + col * 11.5 + (row % 2 === 1 ? 5.5 : 0);   // percent
+      const y = 12 + row * 14;                                   // percent
+      slots.push({ id, row, col, x, y });
+    }
+  }
+  return slots;
+}
+const FIELD_SLOTS = buildFieldSlots();
+
 // -------- localStorage keys --------
 const LS_STATE = 'sg:state';
 const LS_IDENTITY = 'sg:identity';
@@ -173,9 +268,15 @@ function defaultState() {
       onboarded: false,
       settingsUpdatedAt: 0,
     },
-    // Per-day: { date, schoolSugar, schoolSugarUpdatedAt, entries: [...], planted, flower }
+    // Per-day: {
+    //   date,
+    //   schoolSugar, schoolSugarUpdatedAt,
+    //   entries: [...],
+    //   spin: { attempts: [{rarity, speciesId}], keptIndex, pullsAllocated, updatedAt } | null,
+    //   plantedAt: { slotId, ts } | null,
+    //   _schoolPending, _spinPending, _plantPending (local-only)
+    // }
     days: {},
-    unlockedUnlocks: [],
     lastOpenedDate: null,
     ui: { seenOverage: {} },
     members: [],
@@ -202,7 +303,8 @@ function defaultLimitByAge(age) {
 function ensureDay(state, date) {
   if (state.days[date]) return state;
   return { ...state, days: { ...state.days, [date]: {
-    date, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [], planted: false, flower: null,
+    date, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [],
+    spin: null, plantedAt: null,
   }}};
 }
 
@@ -263,6 +365,61 @@ function updateSettings(state, patch) {
   return next;
 }
 
+// Record a spin attempt (for today). Appends to attempts history.
+function addSpinAttempt(state, date, identity) {
+  let next = ensureDay(state, date);
+  const day = next.days[date];
+  const attempts = day.spin?.attempts || [];
+  const allocated = day.spin?.pullsAllocated ?? pullsForDate(state, date);
+  if (attempts.length >= allocated) return next;   // no pulls left
+  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length);
+  const now = Date.now();
+  const newAttempts = [...attempts, { rarity: roll.rarity, speciesId: roll.speciesId }];
+  next = { ...next, days: { ...next.days, [date]: {
+    ...day,
+    spin: {
+      attempts: newAttempts,
+      keptIndex: null,
+      pullsAllocated: allocated,
+      updatedAt: now,
+    },
+    _spinPending: true,
+  }}};
+  saveState(next);
+  return next;
+}
+
+// Lock in the last attempt as the kept result. No more re-rolling today.
+function keepSpin(state, date) {
+  const day = state.days[date];
+  if (!day || !day.spin || !day.spin.attempts.length) return state;
+  const now = Date.now();
+  const next = { ...state, days: { ...state.days, [date]: {
+    ...day,
+    spin: {
+      ...day.spin,
+      keptIndex: day.spin.attempts.length - 1,
+      updatedAt: now,
+    },
+    _spinPending: true,
+  }}};
+  saveState(next);
+  return next;
+}
+
+function plantAt(state, date, slotId) {
+  const day = state.days[date];
+  if (!day) return state;
+  const now = Date.now();
+  const next = { ...state, days: { ...state.days, [date]: {
+    ...day,
+    plantedAt: { slotId, ts: now },
+    _plantPending: true,
+  }}};
+  saveState(next);
+  return next;
+}
+
 function totalForDay(day) {
   if (!day) return 0;
   const live = (day.entries || []).filter(e => !e.deleted);
@@ -276,67 +433,32 @@ function dayStatus(state, date, atTime) {
   const now = atTime || new Date();
   const expected = expectedProgress(now);
   const actualRatio = total / limit;
-  const target = Math.max(0.05, expected);
-  let health;
-  if (actualRatio <= target * 0.9) health = 'thriving';
-  else if (actualRatio <= target * 1.1) health = 'ok';
-  else if (actualRatio <= 1.0) health = 'stressed';
-  else health = 'wilting';
+  const quality = qualityFromPacing(total, limit, date === ymd(now) ? expected : 1.0);
   const liveEntries = (day?.entries || []).filter(e => !e.deleted);
-  return { total, limit, ratio: actualRatio, expected, health, school: day?.schoolSugar || 0, entries: liveEntries };
+  return { total, limit, ratio: actualRatio, expected, quality, school: day?.schoolSugar || 0, entries: liveEntries };
 }
 
-function computeStreak(state, uptoDate) {
-  let streak = 0;
-  const d = parseYMD(uptoDate);
-  for (let i = 0; i < 30; i++) {
-    const dd = new Date(d); dd.setDate(dd.getDate() - i);
-    const key = ymd(dd);
-    const day = state.days[key];
-    if (!day) break;
-    const total = totalForDay(day);
-    const r = total / state.settings.dailyLimit;
-    if (r >= 1.0) break;
-    streak++;
-  }
-  return streak;
+// Today's kept flower (if spin is locked). Returns {rarity, speciesId} or null.
+function keptFlowerFor(state, date) {
+  const spin = state.days[date]?.spin;
+  if (!spin || spin.keptIndex == null) return null;
+  return spin.attempts[spin.keptIndex] || null;
 }
 
-function plantFlowerFor(state, date, familyId) {
-  const day = state.days[date];
-  if (!day || day.planted) return { state, newlyPlanted: null, newUnlocks: [] };
-  const total = totalForDay(day);
-  const r = state.settings.dailyLimit > 0 ? total / state.settings.dailyLimit : 0;
-  const streak = computeStreak(state, date);
-  const flower = pickFlowerForDay({
-    ratio: r, dateStr: date, unlockedUnlocks: state.unlockedUnlocks, streakToday: streak,
-    seed: familyId || 'local',
-  });
-  const newUnlocks = [];
-  for (const key of Object.keys(FLOWERS)) {
-    const f = FLOWERS[key];
-    if (f.rarity !== 'unlock') continue;
-    if (streak >= f.unlockStreak && !state.unlockedUnlocks.includes(key)) newUnlocks.push(key);
-  }
-  const next = {
-    ...state,
-    days: { ...state.days, [date]: { ...day, planted: true, flower } },
-    unlockedUnlocks: [...state.unlockedUnlocks, ...newUnlocks],
-  };
-  saveState(next);
-  return { state: next, newlyPlanted: { date, flower }, newUnlocks };
-}
-
-function unplantedPastDays(state) {
+// Dates that have a kept spin but haven't been planted yet (excluding today).
+function unplantedSpunDates(state) {
   const today = ymd(new Date());
   const out = [];
   for (const key of Object.keys(state.days)) {
-    if (key < today && !state.days[key].planted) out.push(key);
+    if (key >= today) continue;
+    const d = state.days[key];
+    if (d.spin?.keptIndex != null && !d.plantedAt) out.push(key);
   }
   out.sort();
   return out;
 }
 
+// Month view data (still used by history screen)
 function monthData(state, refDate) {
   const base = refDate || new Date();
   const year = base.getFullYear();
@@ -369,14 +491,13 @@ function trendData(state, days) {
 
 // -------- Server merge helpers --------
 
-// Merge server-side entries into state. Server is source of truth for id+updatedAt pairs.
 function mergeServerEntries(state, rows) {
   if (!rows || !rows.length) return state;
   const next = { ...state, days: { ...state.days } };
   for (const r of rows) {
     const date = r.date;
     if (!next.days[date]) {
-      next.days[date] = { date, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [], planted: false, flower: null };
+      next.days[date] = { date, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [], spin: null, plantedAt: null };
     } else {
       next.days[date] = { ...next.days[date], entries: [...next.days[date].entries] };
     }
@@ -394,17 +515,10 @@ function mergeServerEntries(state, rows) {
       updatedAt: Number(r.updatedAt),
       deleted: !!r.deletedAt,
     };
-    if (existingIdx === -1) {
-      entries.push(incoming);
-    } else {
+    if (existingIdx === -1) entries.push(incoming);
+    else {
       const prev = entries[existingIdx];
-      if ((prev.updatedAt || 0) < incoming.updatedAt) {
-        entries[existingIdx] = incoming;
-      }
-    }
-    // Re-plant may need to be invalidated if the day's total changed
-    if (next.days[date].planted) {
-      next.days[date] = { ...next.days[date], planted: false, flower: null };
+      if ((prev.updatedAt || 0) < incoming.updatedAt) entries[existingIdx] = incoming;
     }
   }
   saveState(next);
@@ -418,13 +532,45 @@ function mergeServerSchoolSugar(state, rows) {
     const date = r.date;
     const ts = Number(r.updatedAt);
     if (!next.days[date]) {
-      next.days[date] = { date, schoolSugar: Number(r.sugar) || 0, schoolSugarUpdatedAt: ts, entries: [], planted: false, flower: null };
+      next.days[date] = { date, schoolSugar: Number(r.sugar) || 0, schoolSugarUpdatedAt: ts, entries: [], spin: null, plantedAt: null };
     } else {
       const cur = next.days[date];
       if ((cur.schoolSugarUpdatedAt || 0) < ts) {
-        next.days[date] = { ...cur, schoolSugar: Number(r.sugar) || 0, schoolSugarUpdatedAt: ts, planted: false, flower: null };
+        next.days[date] = { ...cur, schoolSugar: Number(r.sugar) || 0, schoolSugarUpdatedAt: ts };
       }
     }
+  }
+  saveState(next);
+  return next;
+}
+
+// Server-side day_state rows: { date, spinJson, plantedSlot, plantedAt, updatedAt }
+function mergeServerDayState(state, rows) {
+  if (!rows || !rows.length) return state;
+  const next = { ...state, days: { ...state.days } };
+  for (const r of rows) {
+    const date = r.date;
+    const ts = Number(r.updatedAt);
+    if (!next.days[date]) {
+      next.days[date] = { date, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [], spin: null, plantedAt: null };
+    }
+    const cur = next.days[date];
+    let spin = cur.spin;
+    let plantedAt = cur.plantedAt;
+    if (r.spinJson) {
+      try {
+        const remoteSpin = JSON.parse(r.spinJson);
+        if (!spin || (spin.updatedAt || 0) < ts) {
+          spin = { ...remoteSpin, updatedAt: ts };
+        }
+      } catch {}
+    }
+    if (r.plantedSlot) {
+      if (!plantedAt || (plantedAt.ts || 0) < Number(r.plantedAt || ts)) {
+        plantedAt = { slotId: r.plantedSlot, ts: Number(r.plantedAt) || ts };
+      }
+    }
+    next.days[date] = { ...cur, spin, plantedAt };
   }
   saveState(next);
   return next;
@@ -445,18 +591,14 @@ function applyServerFamily(state, family, members) {
         settingsUpdatedAt: serverTs,
       }};
     } else if (!next.settings.onboarded && family.childName) {
-      // Joiner case: mark onboarded once we have a name.
       next = { ...next, settings: { ...next.settings, onboarded: true, childName: family.childName || next.settings.childName, dateOfBirth: family.dateOfBirth || next.settings.dateOfBirth, dailyLimit: Number(family.dailyLimit) || next.settings.dailyLimit, settingsUpdatedAt: serverTs || Date.now() } };
     }
   }
-  if (members) {
-    next = { ...next, members };
-  }
+  if (members) next = { ...next, members };
   saveState(next);
   return next;
 }
 
-// Strip _pending markers on an entry after server ack.
 function markEntrySynced(state, id) {
   const next = { ...state, days: { ...state.days } };
   for (const d of Object.keys(next.days)) {
@@ -476,18 +618,27 @@ function markSettingsSynced(state) {
   saveState(next);
   return next;
 }
+function markDayStateSynced(state, date) {
+  if (!state.days[date]) return state;
+  const next = { ...state, days: { ...state.days, [date]: { ...state.days[date], _spinPending: false, _plantPending: false } } };
+  saveState(next);
+  return next;
+}
 
 Object.assign(window, {
   FOOD_LIBRARY, CATEGORY_META, FLOWERS, SEGMENTS,
+  RARITY_META, RARITY_ORDER, RARITY_PROB, PULLS_FOR_QUALITY, DEFAULT_PULLS,
+  FIELD_SLOTS,
   DAY_START_HOUR, DAY_END_HOUR,
   LS_STATE, LS_IDENTITY, LS_PENDING,
   ymd, parseYMD, isWeekday, segmentFor, expectedProgress,
   loadState, saveState, defaultState,
   ageFromDob, defaultLimitByAge,
   ensureDay, addEntry, removeEntry, setSchoolSugar, updateSettings,
-  totalForDay, dayStatus, computeStreak, pickFlowerForDay, qualityFromRatio,
-  plantFlowerFor, unplantedPastDays,
+  addSpinAttempt, keepSpin, plantAt,
+  rollFlower, pullsForDate, qualityFromPacing, qualityForDay,
+  totalForDay, dayStatus, keptFlowerFor, unplantedSpunDates,
   monthData, trendData,
-  mergeServerEntries, mergeServerSchoolSugar, applyServerFamily,
-  markEntrySynced, markSchoolSynced, markSettingsSynced,
+  mergeServerEntries, mergeServerSchoolSugar, mergeServerDayState, applyServerFamily,
+  markEntrySynced, markSchoolSynced, markSettingsSynced, markDayStateSynced,
 });
