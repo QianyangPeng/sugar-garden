@@ -55,16 +55,27 @@ const RARITY_META = {
 };
 const RARITY_ORDER = ['N', 'R', 'SR', 'SSR', 'UR'];
 
-// Per-pull probabilities. Each pull is an independent roll with these weights.
-// v2 tune (2026-04-19): UR bumped 1% → 5%, SSR 4% → 8%. See PLAN.md.
-// (Dynamic per-quality distributions are planned for a later batch.)
-const RARITY_PROB = {
-  N:    0.40,
-  R:    0.30,
-  SR:   0.17,
-  SSR:  0.08,
-  UR:   0.05,
+// Per-pull probabilities now shift with yesterday's final quality. Good days
+// bias toward high-tier pulls; bad days bias toward N. Within-tier species
+// selection remains uniform. All rows sum to 1.0.
+//
+// These numbers were balanced so that a kid who usually eats "ok"-ish sees UR
+// roughly 5% of pulls (PLAN.md target) but perfect-day streaks can push it to
+// 8%, keeping the top tier reachable without trivializing it.
+const RARITY_PROB_BY_QUALITY = {
+  perfect: { N: 0.25, R: 0.28, SR: 0.22, SSR: 0.17,  UR: 0.08  },
+  great:   { N: 0.32, R: 0.30, SR: 0.20, SSR: 0.11,  UR: 0.07  },
+  ok:      { N: 0.40, R: 0.30, SR: 0.17, SSR: 0.08,  UR: 0.05  },
+  okish:   { N: 0.50, R: 0.28, SR: 0.13, SSR: 0.06,  UR: 0.03  },
+  wilted:  { N: 0.62, R: 0.25, SR: 0.09, SSR: 0.03,  UR: 0.01  },
+  dead:    { N: 0.75, R: 0.18, SR: 0.05, SSR: 0.015, UR: 0.005 },
 };
+// Backward compat for callers without a quality context.
+const RARITY_PROB = RARITY_PROB_BY_QUALITY.ok;
+
+function rarityProbForQuality(quality) {
+  return RARITY_PROB_BY_QUALITY[quality] || RARITY_PROB_BY_QUALITY.ok;
+}
 
 // Pulls allocated to today, based on yesterday's final quality.
 // More pulls => better expected outcome under option-ii (keep or reroll each time).
@@ -127,15 +138,15 @@ const FLOWERS = {
 };
 
 // -------- Flower roll (gacha) --------
-// Deterministic given (familyId, date, pullIndex).
-function rollRarity(seed) {
+// Deterministic given (familyId, date, pullIndex, quality).
+function rollRarity(seed, weights = RARITY_PROB) {
   const r = mulberry32(seed)();
   let cumulative = 0;
   for (const tier of RARITY_ORDER) {
-    cumulative += RARITY_PROB[tier];
+    cumulative += weights[tier] || 0;
     if (r < cumulative) return tier;
   }
-  return 'R';
+  return 'N';
 }
 function rollSpecies(seed, rarity) {
   const list = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === rarity);
@@ -143,15 +154,28 @@ function rollSpecies(seed, rarity) {
   const pick = Math.floor(mulberry32(seed + 1)() * list.length);
   return list[pick];
 }
-// Composite: given familyId + date + pullIndex, produce a reproducible {rarity, speciesId}.
-// `forceRarity` (optional) lets debug-mode short-circuit the rarity roll; species is still
-// picked pseudo-randomly from that tier so repeated forced pulls vary visually.
-function rollFlower(familyId, date, pullIndex, forceRarity) {
+// Composite: given familyId + date + pullIndex, produce a reproducible
+// {rarity, speciesId}. `quality` is yesterday's final quality and picks the
+// weight row; `forceRarity` (debug) short-circuits the rarity roll.
+function rollFlower(familyId, date, pullIndex, forceRarity, quality) {
+  const weights = rarityProbForQuality(quality || 'ok');
   const seed = hashStr(`${familyId}:${date}:${pullIndex}:rarity`);
-  const rarity = forceRarity && RARITY_META[forceRarity] ? forceRarity : rollRarity(seed);
+  const rarity = forceRarity && RARITY_META[forceRarity] ? forceRarity : rollRarity(seed, weights);
   const speciesSeed = hashStr(`${familyId}:${date}:${pullIndex}:${rarity}`);
   const speciesId = rollSpecies(speciesSeed, rarity);
   return { rarity, speciesId, pullIndex };
+}
+
+// Yesterday's final quality (or 'ok' default). Drives both today's pulls and
+// today's probability distribution — they stay in lock-step.
+function effectiveQualityFor(state, date) {
+  const d = parseYMD(date);
+  d.setDate(d.getDate() - 1);
+  const prev = ymd(d);
+  const prevDay = state.days[prev];
+  if (!prevDay?.spin || prevDay.spin.keptIndex == null) return 'ok';
+  const total = totalForDay(prevDay);
+  return qualityFromPacing(total, state.settings.dailyLimit, 1.0);
 }
 
 // -------- Pacing-based quality --------
@@ -183,13 +207,7 @@ function qualityForDay(state, date, atTime) {
 
 // Pulls allocated today, based on yesterday's final quality (if any).
 function pullsForDate(state, date) {
-  const d = parseYMD(date);
-  d.setDate(d.getDate() - 1);
-  const yesterday = ymd(d);
-  const yestDay = state.days[yesterday];
-  if (!yestDay || !yestDay.spin || yestDay.spin.keptIndex == null) return DEFAULT_PULLS;
-  const total = totalForDay(yestDay);
-  const q = qualityFromPacing(total, state.settings.dailyLimit, 1.0);
+  const q = effectiveQualityFor(state, date);
   return PULLS_FOR_QUALITY[q] || DEFAULT_PULLS;
 }
 
@@ -420,7 +438,8 @@ function addSpinAttempt(state, date, identity) {
   const allocated = day.spin?.pullsAllocated ?? pullsForDate(state, date);
   if (attempts.length >= allocated) return next;
   const forceRarity = state.debug?.forceRarity || null;
-  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length, forceRarity);
+  const quality = effectiveQualityFor(state, date);
+  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length, forceRarity, quality);
   const now = Date.now();
   const newAttempts = [...attempts, { rarity: roll.rarity, speciesId: roll.speciesId }];
   next = { ...next, days: { ...next.days, [date]: {
@@ -735,7 +754,8 @@ function debugWipeLocal() {
 
 Object.assign(window, {
   FOOD_LIBRARY, CATEGORY_META, FLOWERS, SEGMENTS,
-  RARITY_META, RARITY_ORDER, RARITY_PROB, PULLS_FOR_QUALITY, DEFAULT_PULLS,
+  RARITY_META, RARITY_ORDER, RARITY_PROB, RARITY_PROB_BY_QUALITY, rarityProbForQuality,
+  effectiveQualityFor, PULLS_FOR_QUALITY, DEFAULT_PULLS,
   FIELD_SLOTS,
   DAY_START_HOUR, DAY_END_HOUR,
   LS_STATE, LS_IDENTITY, LS_PENDING,

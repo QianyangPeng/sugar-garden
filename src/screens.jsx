@@ -305,10 +305,11 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
 
   async function runSpin() {
     if (used >= allocated) return;
-    // 1. Pre-compute. Use the same forceRarity + seed addSpinAttempt will use,
-    //    so the animation target matches the committed result exactly.
+    // 1. Pre-compute. Must match addSpinAttempt's call exactly (same seed +
+    //    quality + forceRarity) so the animation lands on the committed result.
     const forceRarity = state.debug?.forceRarity || null;
-    const roll = rollFlower(identity?.familyId || 'local', date, used, forceRarity);
+    const quality = effectiveQualityFor(state, date);
+    const roll = rollFlower(identity?.familyId || 'local', date, used, forceRarity, quality);
     setTarget(roll);
 
     // 2. Rarity phase: decelerating tile-highlight, lands on target tier.
@@ -323,25 +324,33 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
     // Give a short beat so the user sees the locked-in rarity.
     await sleep(250);
 
-    // 3. Species phase: precompute a long strip ending on the target, slide once.
+    // 3. Species phase: build a strip with target *not at the end* — extra species
+    //    follow the target so the carousel visually spills past rather than
+    //    "hitting a wall". The slide lands the target centered.
     const list = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === roll.rarity);
     const targetSpeciesIdx = list.indexOf(roll.speciesId);
     const cycles = 3;
+    const tailExtra = 4;   // items after target, visible off-screen to the right
     const strip = [];
     for (let c = 0; c < cycles; c++) strip.push(...list);
     strip.push(...list.slice(0, targetSpeciesIdx + 1));
+    for (let i = 0; i < tailExtra; i++) {
+      strip.push(list[(targetSpeciesIdx + 1 + i) % list.length]);
+    }
     setSpeciesStrip(strip);
     setStripTx(0);
     setStripTransition('none');
     setPhase('spinning-species');
-    // Wait two frames for the new DOM (with transition: none) to commit
-    // before we set the target transform that triggers the slide.
+    // Two frames so the transition: none commits before we trigger the slide.
     await sleep(60);
-    const finalIdx = strip.length - 1;
-    const targetTx = -(finalIdx - Math.floor(VISIBLE / 2)) * ITEM_WIDTH;
-    setStripTransition('transform 2s cubic-bezier(0.17, 0.67, 0.17, 0.99)');
+    // Target lives cycles-deep into the strip, not at the end.
+    const targetIndexInStrip = cycles * list.length + targetSpeciesIdx;
+    const targetTx = -(targetIndexInStrip - Math.floor(VISIBLE / 2)) * ITEM_WIDTH;
+    // cubic-bezier picked so the last ~20% of the slide is very slow —
+    // the carousel visibly creeps to a stop, slot-machine style.
+    setStripTransition('transform 2.8s cubic-bezier(0.08, 0.82, 0.12, 1)');
     setStripTx(targetTx);
-    await sleep(2050);
+    await sleep(2850);
 
     // 4. Commit (rollFlower inside addSpinAttempt will produce the same result).
     const next = addSpinAttempt(state, date, identity);
@@ -557,16 +566,46 @@ function FlowerField({ state, setState, onClose, onOpenHistory }) {
     setState?.(next);
   }
 
+  // Unified wind: rAF-driven CSS variable on the field container. Every flower
+  // reads `var(--wind-deg)` in its transform so they all lean the same direction.
+  // Mouse position tilts the wind stronger toward the cursor side; when no mouse,
+  // a slow sin wave keeps the field alive.
+  const fieldRef = useRef(null);
+  const mouseRef = useRef({ x: 0.5, active: false });
+
+  useEffect(() => {
+    let raf, start = performance.now();
+    const tick = (t) => {
+      const elapsed = (t - start) / 1000;
+      // Two layered sines so it doesn't feel metronomic.
+      const base = Math.sin(elapsed * 0.75) * 2.4 + Math.sin(elapsed * 1.3 + 0.8) * 0.8;
+      const m = mouseRef.current;
+      const pull = m.active ? (m.x - 0.5) * 16 : 0;
+      const angle = (base + pull).toFixed(2);
+      if (fieldRef.current) fieldRef.current.style.setProperty('--wind-deg', `${angle}deg`);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  function onFieldMove(e) {
+    const r = fieldRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const touch = e.touches?.[0];
+    const clientX = touch ? touch.clientX : e.clientX;
+    mouseRef.current = { x: Math.max(0, Math.min(1, (clientX - r.left) / r.width)), active: true };
+  }
+  function onFieldLeave() { mouseRef.current = { ...mouseRef.current, active: false }; }
+
   // Row-based layered sizing + z-index for depth.
   function slotPresentation(slot) {
-    // row 0 (back) → row 5 (front)
     const size = 58 + slot.row * 7;   // 58..93
     const zIndex = slot.row + 1;
-    // deterministic jitter from slot id for natural look
+    // tiny deterministic vertical jitter so rows aren't perfectly straight
     const h = hashStr(slot.id);
-    const tilt = ((h % 13) - 6);      // -6..+6
-    const dy = ((h >> 4) % 7) - 3;    // -3..+3 px offset
-    return { size, zIndex, tilt, dy };
+    const dy = ((h >> 4) % 7) - 3;    // -3..+3 px
+    return { size, zIndex, dy };
   }
 
   return (
@@ -610,10 +649,17 @@ function FlowerField({ state, setState, onClose, onOpenHistory }) {
       )}
 
       {/* Field canvas */}
-      <div style={{ flex: 1, margin: '4px 14px 14px', position: 'relative',
-        background: 'linear-gradient(180deg, #c8e8a8 0%, #8ac260 45%, #d9b88a 100%)',
-        borderRadius: 24, border: '3px solid #7c6142',
-        boxShadow: 'inset 0 8px 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+      <div
+        ref={fieldRef}
+        onMouseMove={onFieldMove} onMouseLeave={onFieldLeave}
+        onTouchMove={onFieldMove} onTouchEnd={onFieldLeave}
+        style={{ flex: 1, margin: '4px 14px 14px', position: 'relative',
+          background: 'linear-gradient(180deg, #c8e8a8 0%, #8ac260 45%, #d9b88a 100%)',
+          borderRadius: 24, border: '3px solid #7c6142',
+          boxShadow: 'inset 0 8px 20px rgba(0,0,0,0.12)', overflow: 'hidden',
+          // CSS custom property updated at ~60Hz by the rAF tick above.
+          '--wind-deg': '0deg',
+        }}>
 
         {/* Decorative grass tufts at top edge */}
         <svg viewBox="0 0 400 40" preserveAspectRatio="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 28, width: '100%', zIndex: 0 }}>
@@ -624,30 +670,35 @@ function FlowerField({ state, setState, onClose, onOpenHistory }) {
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '18%',
           background: 'linear-gradient(180deg, transparent, rgba(124, 97, 66, 0.25))', zIndex: 0 }} />
 
-        {/* Slots — iterate row-first for correct z layering */}
+        {/* Slots */}
         {FIELD_SLOTS.map(slot => {
           const p = bySlot[slot.id];
-          const { size, zIndex, tilt, dy } = slotPresentation(slot);
+          const { size, zIndex, dy } = slotPresentation(slot);
           const left = `${slot.x}%`;
           const top = `calc(${slot.y}% + ${dy}px)`;
 
           if (p) {
             const glowing = RARITY_ORDER.indexOf(p.flower.rarity) >= 3;
             return (
-              <button key={slot.id} onClick={() => setSelected(p)}
+              <button key={slot.id}
+                onClick={inPlantMode ? undefined : () => setSelected(p)}
                 className="sg-flower-card"
+                disabled={inPlantMode}
                 style={{
                   position: 'absolute', left, top, zIndex,
                   width: size, height: size * 1.4,
-                  transform: `translate(-50%, -75%) rotate(${tilt}deg)`,
-                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                  // All flowers share the same wind-deg CSS var → they lean together.
+                  transform: 'translate(-50%, -75%) rotate(var(--wind-deg, 0deg))',
+                  transformOrigin: '50% 90%',   // pivot near stem base
+                  background: 'transparent', border: 'none',
+                  cursor: inPlantMode ? 'default' : 'pointer', padding: 0,
+                  pointerEvents: inPlantMode ? 'none' : 'auto',
+                  opacity: inPlantMode ? 0.85 : 1,
                   filter: glowing
                     ? `drop-shadow(0 0 10px ${p.flower.rarity === 'UR' ? 'rgba(255,210,74,0.6)' : RARITY_META[p.flower.rarity].colorSoft})`
                     : 'drop-shadow(0 4px 6px rgba(0,0,0,0.18))',
-                  transition: 'transform 0.15s',
+                  transition: 'transform 0.35s cubic-bezier(0.3, 0.7, 0.4, 1), opacity 0.25s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.transform = `translate(-50%, -78%) rotate(${tilt}deg) scale(1.08)`}
-                onMouseLeave={e => e.currentTarget.style.transform = `translate(-50%, -75%) rotate(${tilt}deg)`}
               >
                 <FlowerSVG size={size} species={p.flower.speciesId} quality={p.quality} animate />
               </button>
@@ -661,10 +712,10 @@ function FlowerField({ state, setState, onClose, onOpenHistory }) {
               onClick={() => pickSlot(slot.id)}
               style={{
                 position: 'absolute', left, top, zIndex: zIndex - 1,
-                width: inPlantMode ? 34 : 16, height: inPlantMode ? 34 : 16,
+                width: inPlantMode ? 36 : 16, height: inPlantMode ? 36 : 16,
                 transform: 'translate(-50%, -50%)',
                 borderRadius: '50%',
-                background: inPlantMode ? 'rgba(255, 240, 160, 0.75)' : 'rgba(90, 60, 30, 0.18)',
+                background: inPlantMode ? 'rgba(255, 240, 160, 0.8)' : 'rgba(90, 60, 30, 0.18)',
                 border: inPlantMode ? '2px dashed #7c4a1d' : 'none',
                 cursor: inPlantMode ? 'pointer' : 'default',
                 display: 'grid', placeItems: 'center', padding: 0,
@@ -679,7 +730,7 @@ function FlowerField({ state, setState, onClose, onOpenHistory }) {
         <style>{`
           @keyframes sg-pulse-slot {
             0%,100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-            50%     { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+            50%     { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
           }
         `}</style>
       </div>
@@ -1020,6 +1071,70 @@ function JoinFamilyFlow({ inviteFrag, onDone, onBack, busy, errorMsg }) {
 
 // PlantingCeremony removed (replaced by SpinWheel + PlantYesterday above).
 
+// ============ TOMORROW PROBABILITY PANEL ============
+// Shows tomorrow's rarity distribution + pull count, live-derived from today's
+// current quality (sugar vs time pacing). As the kid eats more sugar, the bars
+// redistribute to show the real consequence.
+function TomorrowProbPanel({ state, now }) {
+  const today = ymd(now || new Date());
+  const day = state.days[today];
+  const total = day ? totalForDay(day) : 0;
+  const expected = expectedProgress(now || new Date());
+  const liveQuality = qualityFromPacing(total, state.settings.dailyLimit, expected);
+  const weights = rarityProbForQuality(liveQuality);
+  const pulls = PULLS_FOR_QUALITY[liveQuality] || DEFAULT_PULLS;
+  return (
+    <div style={{
+      padding: '10px 14px', background: '#fff',
+      border: '2px solid #23331f', borderRadius: 16, boxShadow: '0 3px 0 #23331f',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{ font: "700 12px 'Noto Sans SC'", color: '#23331f' }}>
+          🎲 明天抽卡概率
+        </div>
+        <div style={{ font: "500 10px 'Noto Sans SC'", color: '#8a9a85' }}>
+          今天吃糖影响明天
+        </div>
+      </div>
+      {/* Stacked bar */}
+      <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', border: '1.5px solid #23331f' }}>
+        {RARITY_ORDER.map(r => {
+          const w = weights[r];
+          const m = RARITY_META[r];
+          const isRb = r === 'UR';
+          return (
+            <div key={r} title={`${r} ${(w * 100).toFixed(1)}%`} style={{
+              width: `${w * 100}%`,
+              background: isRb ? RAINBOW_LINEAR_LOOP : m.color,
+              backgroundSize: isRb ? '400% 100%' : undefined,
+              animation: isRb ? 'sg-rainbow-slide 8s linear infinite' : null,
+              transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+            }} />
+          );
+        })}
+      </div>
+      {/* Percentage labels under each tier */}
+      <div style={{ display: 'flex', marginTop: 6, gap: 2 }}>
+        {RARITY_ORDER.map(r => {
+          const w = weights[r];
+          return (
+            <div key={r} style={{
+              flex: w, minWidth: 0, textAlign: 'center',
+              font: "700 10px 'Baloo 2'", color: '#23331f', whiteSpace: 'nowrap',
+            }}>
+              {r}<span style={{ fontWeight: 500, color: '#5c6d54' }}> {Math.round(w * 100)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, font: "500 10px 'Noto Sans SC'", color: '#5c6d54' }}>
+        <span>当前品质：<b style={{ color: '#23331f' }}>{QUALITY_LABEL[liveQuality] || liveQuality}</b></span>
+        <span>明天抽卡：<b style={{ color: '#23331f' }}>{pulls}</b> 次</span>
+      </div>
+    </div>
+  );
+}
+
 // ============ TODAY SCREEN ============
 function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField, onOpenSettings, onOpenTrend, onOpenHistory }) {
   const [now, setNow] = useState(new Date());
@@ -1118,6 +1233,11 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField,
       <div style={{ margin: '14px 18px 0' }}>
         <SegmentedProgress total={status.total} limit={status.limit} expected={status.expected}
           entries={day.entries} schoolSugar={day.schoolSugar} />
+      </div>
+
+      {/* Tomorrow's gacha odds — updates live with today's sugar */}
+      <div style={{ margin: '14px 18px 0' }}>
+        <TomorrowProbPanel state={state} now={now} />
       </div>
 
       {/* School (weekday) / free day */}
@@ -1985,7 +2105,7 @@ Object.assign(window, {
   SchoolSheet, OverageModal, HistoryScreen, DayDetail, TrendScreen, SettingsScreen,
   SpinWheel, FlowerField,
   RarityFrame, RarityBadge, StarRating, QualityFx, WindLeaves,
-  DebugPanel,
+  TomorrowProbPanel, DebugPanel,
   QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR, RAINBOW_LINEAR_LOOP,
   EntryList,
 });
