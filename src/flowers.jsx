@@ -16,15 +16,27 @@ function FlowerSVG({ size = 100, species, quality = 'great', animate = false, st
   const petal = f?.petal || '#ff9ec4';
   const center = f?.center || '#ffd24a';
 
+  // Animation note: CSS `transform: rotate(...)` on an SVG <g> overrides the SVG
+  // `transform="translate(...) scale(...)"` attribute — that's why we split into
+  // an outer static <g> (positioning/scaling via SVG attr) and an inner animated <g>
+  // (CSS transform for sway only). `transform-box: fill-box` makes rotation happen
+  // around the element's own bounding-box center, not the SVG root origin.
+  const swayStyle = animate ? {
+    transformBox: 'fill-box',
+    transformOrigin: 'center',
+    animation: 'flower-sway 3.2s ease-in-out infinite',
+  } : null;
+
   if (headOnly) {
     // Tight square viewBox — for hero usage where we don't want a long stem
     return (
       <svg viewBox="-40 -40 80 80" width={s} height={s} style={style}>
-        <g transform={`scale(${quality === 'perfect' ? 1.18 : 1.1}) rotate(${quality === 'okish' ? -8 : 0})`}
-           style={animate ? { transformOrigin: 'center', animation: 'flower-sway 3.2s ease-in-out infinite' } : null}>
-          {renderFlowerHead(shape, petal, center, quality)}
+        <g transform={`scale(${quality === 'perfect' ? 1.18 : 1.1}) rotate(${quality === 'okish' ? -8 : 0})`}>
+          <g style={swayStyle}>
+            {renderFlowerHead(shape, petal, center, quality)}
+          </g>
         </g>
-        {animate && <style>{`@keyframes flower-sway { 0%,100%{transform:rotate(-3deg) scale(1.1);} 50%{transform:rotate(3deg) scale(1.15);} }`}</style>}
+        {animate && <style>{`@keyframes flower-sway { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }`}</style>}
       </svg>
     );
   }
@@ -32,9 +44,10 @@ function FlowerSVG({ size = 100, species, quality = 'great', animate = false, st
   return (
     <svg viewBox="0 0 100 140" width={s} height={s * 1.4} style={style}>
       <Stem tilt={quality === 'okish' ? 12 : quality === 'ok' ? 4 : 0} />
-      <g transform={`translate(50 40) scale(${quality === 'perfect' ? 1.06 : 1}) rotate(${quality === 'okish' ? -8 : 0})`}
-         style={animate ? { transformOrigin: '50px 40px', animation: 'flower-sway 3.2s ease-in-out infinite' } : null}>
-        {renderFlowerHead(shape, petal, center, quality)}
+      <g transform={`translate(50 40) scale(${quality === 'perfect' ? 1.06 : 1}) rotate(${quality === 'okish' ? -8 : 0})`}>
+        <g style={swayStyle}>
+          {renderFlowerHead(shape, petal, center, quality)}
+        </g>
       </g>
       {animate && <style>{`@keyframes flower-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }`}</style>}
     </svg>
