@@ -514,109 +514,19 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
   );
 }
 
-// ============ PLANT YESTERDAY'S FLOWER INTO THE FIELD ============
-// Shown once per unplanted past day. Kid picks an empty slot; plantAt is called.
-function PlantYesterday({ state, setState, date, onDone }) {
-  const day = state.days[date];
-  const flower = keptFlowerFor(state, date);
-  if (!flower) { onDone?.(); return null; }
-  const total = totalForDay(day);
-  const quality = qualityFromPacing(total, state.settings.dailyLimit, 1.0);
-  const occupiedSlotIds = new Set(
-    Object.values(state.days).map(d => d.plantedAt?.slotId).filter(Boolean)
-  );
-  const [hoverSlot, setHoverSlot] = useState(null);
+// PlantYesterday is folded into FlowerField below. The field automatically enters
+// "plant mode" whenever there's a kept-but-unplanted past day.
 
-  function pickSlot(slotId) {
-    if (occupiedSlotIds.has(slotId)) return;
-    const next = plantAt(state, date, slotId);
-    setState?.(next);
-    onDone?.();
-  }
-
-  const d = parseYMD(date);
-  const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日`;
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 62,
-      background: 'linear-gradient(180deg, #d7e6c6 0%, #b9d89a 100%)',
-      padding: 20, display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ textAlign: 'center', marginTop: 8 }}>
-        <div style={{ font: "500 12px 'Noto Sans SC'", color: '#3b6e2b' }}>{dateLabel} 培育好的花</div>
-        <div style={{ font: "700 22px 'ZCOOL KuaiLe'", color: '#23331f', marginTop: 2 }}>
-          把它种到哪里？
-        </div>
-      </div>
-
-      {/* Preview of the flower to plant */}
-      <div style={{ display: 'grid', placeItems: 'center', margin: '14px 0' }}>
-        <RarityFrame rarity={flower.rarity} padding={4} radius={16}>
-          <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
-            <div style={{ position: 'relative', width: 80, height: 80 }}>
-              <FlowerSVG size={80} species={flower.speciesId} quality={quality} animate headOnly />
-              <QualityFx quality={quality} rarity={flower.rarity} />
-            </div>
-            <div>
-              <RarityBadge rarity={flower.rarity} size="sm" />
-              <div style={{ font: "700 14px 'ZCOOL KuaiLe'", marginTop: 4 }}>
-                {FLOWERS[flower.speciesId]?.name}
-              </div>
-            </div>
-          </div>
-        </RarityFrame>
-      </div>
-
-      {/* Field */}
-      <div style={{
-        flex: 1, position: 'relative', margin: '10px 4px',
-        background: 'linear-gradient(180deg, #e8d8b0 0%, #b88d5a 100%)',
-        borderRadius: 24, border: '3px solid #7c6142',
-        boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden',
-      }}>
-        {FIELD_SLOTS.map(slot => {
-          const occ = occupiedSlotIds.has(slot.id);
-          return (
-            <button key={slot.id}
-              disabled={occ}
-              onClick={() => pickSlot(slot.id)}
-              onMouseEnter={() => setHoverSlot(slot.id)}
-              onMouseLeave={() => setHoverSlot(null)}
-              style={{
-                position: 'absolute',
-                left: `${slot.x}%`, top: `${slot.y}%`,
-                width: 32, height: 32, transform: 'translate(-50%, -50%)',
-                borderRadius: '50%',
-                background: occ ? 'transparent' :
-                            hoverSlot === slot.id ? '#ffd24a' : 'rgba(90, 60, 30, 0.35)',
-                border: occ ? 'none' : '2px dashed #5a3a20',
-                cursor: occ ? 'default' : 'pointer',
-                display: 'grid', placeItems: 'center', padding: 0,
-                animation: !occ ? 'sg-pulse-slot 2s ease-in-out infinite' : null,
-                opacity: occ ? 0 : 1,
-              }}>
-              {!occ && <span style={{ fontSize: 14 }}>＋</span>}
-            </button>
-          );
-        })}
-        <style>{`
-          @keyframes sg-pulse-slot {
-            0%,100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-            50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
-          }
-        `}</style>
-      </div>
-
-      <p style={{ font: "500 11px 'Noto Sans SC'", color: '#23331f', textAlign: 'center', margin: '8px 0 0' }}>
-        点空格把花种下去 🌱
-      </p>
-    </div>
-  );
-}
-
-// ============ FLOWER FIELD (primary garden view) ============
-function FlowerField({ state, onClose, onOpenHistory }) {
+// ============ FLOWER FIELD (primary garden view + plant mode) ============
+// Visual plan:
+//  - No pots. Flowers stand free in a green-to-soil gradient field.
+//  - Row-based depth: back rows smaller + lower z-index, front rows larger +
+//    higher z-index, so front flowers visually overlap back ones (层层叠叠).
+//  - Deterministic per-slot tilt (-6°..+6°) for natural scatter.
+//  - Plant mode: triggered automatically when there's an unplanted past day
+//    (normal flow) or when debug seeds one. Empty slots pulse; clicking one
+//    calls plantAt and, if more dates are queued, the next one loads.
+function FlowerField({ state, setState, onClose, onOpenHistory }) {
   const plantings = [];
   for (const date of Object.keys(state.days)) {
     const d = state.days[date];
@@ -628,19 +538,50 @@ function FlowerField({ state, onClose, onOpenHistory }) {
   }
   const bySlot = {};
   for (const p of plantings) bySlot[p.slotId] = p;
+
+  // Detect the earliest unplanted spun past day → enter plant mode
+  const unplanted = unplantedSpunDates(state);
+  const plantDate = unplanted[0] || null;
+  const plantFlower = plantDate ? keptFlowerFor(state, plantDate) : null;
+  const plantQuality = plantDate ? qualityFromPacing(
+    totalForDay(state.days[plantDate]), state.settings.dailyLimit, 1.0
+  ) : 'perfect';
+  const inPlantMode = !!plantFlower;
+
   const [selected, setSelected] = useState(null);
+
+  function pickSlot(slotId) {
+    if (!plantDate) return;
+    if (bySlot[slotId]) return;
+    const next = plantAt(state, plantDate, slotId);
+    setState?.(next);
+  }
+
+  // Row-based layered sizing + z-index for depth.
+  function slotPresentation(slot) {
+    // row 0 (back) → row 5 (front)
+    const size = 58 + slot.row * 7;   // 58..93
+    const zIndex = slot.row + 1;
+    // deterministic jitter from slot id for natural look
+    const h = hashStr(slot.id);
+    const tilt = ((h % 13) - 6);      // -6..+6
+    const dy = ((h >> 4) % 7) - 3;    // -3..+3 px offset
+    return { size, zIndex, tilt, dy };
+  }
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 45,
       background: 'linear-gradient(180deg, #bfe0a5 0%, #e9f1df 100%)',
       display: 'flex', flexDirection: 'column' }}>
+
+      {/* Header */}
       <div style={{ padding: '16px 18px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12,
           border: '2px solid #23331f', background: '#fff', fontSize: 16, cursor: 'pointer', boxShadow: '0 2px 0 #23331f' }}>←</button>
         <div style={{ flex: 1 }}>
           <div style={{ font: "700 20px 'ZCOOL KuaiLe'" }}>花田</div>
           <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>
-            已种 {plantings.length} 朵
+            已种 {plantings.length} 朵{inPlantMode ? ' · 选个空位种下这朵' : ''}
           </div>
         </div>
         <button onClick={onOpenHistory} title="历史记录" style={{
@@ -649,56 +590,108 @@ function FlowerField({ state, onClose, onOpenHistory }) {
         }}>📅 历史</button>
       </div>
 
+      {/* Plant-mode preview banner (shown above field) */}
+      {inPlantMode && (
+        <div style={{ margin: '0 14px 8px', display: 'flex', justifyContent: 'center' }}>
+          <RarityFrame rarity={plantFlower.rarity} padding={4} radius={14}>
+            <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+              <div style={{ position: 'relative', width: 54, height: 54 }}>
+                <FlowerSVG size={54} species={plantFlower.speciesId} quality={plantQuality} animate headOnly />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <RarityBadge rarity={plantFlower.rarity} size="sm" />
+                <div style={{ font: "700 14px 'ZCOOL KuaiLe'", marginTop: 2 }}>
+                  {FLOWERS[plantFlower.speciesId]?.name}
+                </div>
+              </div>
+            </div>
+          </RarityFrame>
+        </div>
+      )}
+
+      {/* Field canvas */}
       <div style={{ flex: 1, margin: '4px 14px 14px', position: 'relative',
-        background: 'linear-gradient(180deg, #e8d8b0 0%, #b88d5a 100%)',
+        background: 'linear-gradient(180deg, #c8e8a8 0%, #8ac260 45%, #d9b88a 100%)',
         borderRadius: 24, border: '3px solid #7c6142',
-        boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-        {/* Decorative: grass tufts top */}
-        <svg viewBox="0 0 400 40" preserveAspectRatio="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 30, width: '100%' }}>
-          <path d="M0 40 Q20 10 40 40 Q60 15 80 40 Q100 5 120 40 Q140 18 160 40 Q180 8 200 40 Q220 20 240 40 Q260 10 280 40 Q300 15 320 40 Q340 5 360 40 Q380 18 400 40 Z" fill="#7ab985" />
+        boxShadow: 'inset 0 8px 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+
+        {/* Decorative grass tufts at top edge */}
+        <svg viewBox="0 0 400 40" preserveAspectRatio="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 28, width: '100%', zIndex: 0 }}>
+          <path d="M0 40 Q20 10 40 40 Q60 15 80 40 Q100 5 120 40 Q140 18 160 40 Q180 8 200 40 Q220 20 240 40 Q260 10 280 40 Q300 15 320 40 Q340 5 360 40 Q380 18 400 40 Z" fill="#7ab985" opacity="0.85" />
         </svg>
-        {/* Slots */}
+
+        {/* Soil patches at bottom */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '18%',
+          background: 'linear-gradient(180deg, transparent, rgba(124, 97, 66, 0.25))', zIndex: 0 }} />
+
+        {/* Slots — iterate row-first for correct z layering */}
         {FIELD_SLOTS.map(slot => {
           const p = bySlot[slot.id];
-          if (!p) {
+          const { size, zIndex, tilt, dy } = slotPresentation(slot);
+          const left = `${slot.x}%`;
+          const top = `calc(${slot.y}% + ${dy}px)`;
+
+          if (p) {
+            const glowing = RARITY_ORDER.indexOf(p.flower.rarity) >= 3;
             return (
-              <div key={slot.id} style={{
-                position: 'absolute', left: `${slot.x}%`, top: `${slot.y}%`,
-                width: 22, height: 22, borderRadius: '50%',
-                background: 'rgba(90, 60, 30, 0.2)', transform: 'translate(-50%, -50%)',
-              }} />
+              <button key={slot.id} onClick={() => setSelected(p)}
+                className="sg-flower-card"
+                style={{
+                  position: 'absolute', left, top, zIndex,
+                  width: size, height: size * 1.4,
+                  transform: `translate(-50%, -75%) rotate(${tilt}deg)`,
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                  filter: glowing
+                    ? `drop-shadow(0 0 10px ${p.flower.rarity === 'UR' ? 'rgba(255,210,74,0.6)' : RARITY_META[p.flower.rarity].colorSoft})`
+                    : 'drop-shadow(0 4px 6px rgba(0,0,0,0.18))',
+                  transition: 'transform 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = `translate(-50%, -78%) rotate(${tilt}deg) scale(1.08)`}
+                onMouseLeave={e => e.currentTarget.style.transform = `translate(-50%, -75%) rotate(${tilt}deg)`}
+              >
+                <FlowerSVG size={size} species={p.flower.speciesId} quality={p.quality} animate />
+              </button>
             );
           }
+
+          // Empty slot: subtle dot in view mode; pulsing + in plant mode
           return (
-            <button key={slot.id} onClick={() => setSelected(p)} style={{
-              position: 'absolute', left: `${slot.x}%`, top: `${slot.y}%`,
-              width: 46, height: 56, transform: 'translate(-50%, -60%)',
-              background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
-            }}>
-              <PotFlower species={p.flower.speciesId} quality={p.quality} size={42} />
-              {RARITY_ORDER.indexOf(p.flower.rarity) >= 3 && (
-                <div style={{
-                  position: 'absolute', inset: '-6px', borderRadius: '50%',
-                  boxShadow: p.flower.rarity === 'UR'
-                    ? '0 0 12px rgba(255,210,74,0.6)'
-                    : `0 0 8px ${RARITY_META[p.flower.rarity].colorSoft}`,
-                  pointerEvents: 'none',
-                }} />
-              )}
+            <button key={slot.id}
+              disabled={!inPlantMode}
+              onClick={() => pickSlot(slot.id)}
+              style={{
+                position: 'absolute', left, top, zIndex: zIndex - 1,
+                width: inPlantMode ? 34 : 16, height: inPlantMode ? 34 : 16,
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                background: inPlantMode ? 'rgba(255, 240, 160, 0.75)' : 'rgba(90, 60, 30, 0.18)',
+                border: inPlantMode ? '2px dashed #7c4a1d' : 'none',
+                cursor: inPlantMode ? 'pointer' : 'default',
+                display: 'grid', placeItems: 'center', padding: 0,
+                animation: inPlantMode ? 'sg-pulse-slot 1.8s ease-in-out infinite' : 'none',
+                color: '#5a3a20', font: "700 14px 'Noto Sans SC'",
+              }}>
+              {inPlantMode ? '＋' : null}
             </button>
           );
         })}
+
+        <style>{`
+          @keyframes sg-pulse-slot {
+            0%,100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+            50%     { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+          }
+        `}</style>
       </div>
 
+      {/* Detail modal (view mode only) */}
       {selected && (
         <div onClick={() => setSelected(null)} style={{
-          position: 'absolute', inset: 0, zIndex: 5,
+          position: 'absolute', inset: 0, zIndex: 50,
           background: 'rgba(35,51,31,0.55)',
           display: 'grid', placeItems: 'center', padding: 20,
         }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            width: '100%', maxWidth: 320,
-          }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 320 }}>
             <RarityFrame rarity={selected.flower.rarity} padding={6} radius={22}>
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
                 <FlowerSVG size={140} species={selected.flower.speciesId} quality={selected.quality} animate />
@@ -1948,9 +1941,28 @@ function DebugPanel({ state, identity, onForceRarity, onResetToday, onSeedYester
 
           <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button onClick={onResetToday} style={btnStyle}>🎰 重抽今日（清今日 spin）</button>
-            <button onClick={() => onSeedYesterday('SSR')} style={btnStyle}>🌱 造未种昨天 · SSR</button>
-            <button onClick={() => onSeedYesterday('UR')} style={btnStyle}>🌱 造未种昨天 · UR</button>
-            <button onClick={onWipe} style={{...btnStyle, borderColor: '#c2453c', color: '#c2453c'}}>
+            <div style={{ fontSize: 11, fontWeight: 600, marginTop: 4 }}>种一朵花到花田：</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {RARITY_ORDER.map(r => {
+                const m = RARITY_META[r];
+                const isRb = r === 'UR';
+                return (
+                  <button key={r} onClick={() => onSeedYesterday(r)} style={{
+                    flex: 1, padding: '6px 2px', borderRadius: 8,
+                    border: '1.5px solid #23331f',
+                    background: isRb ? RAINBOW_LINEAR : m.color,
+                    backgroundSize: isRb ? '200% 100%' : undefined,
+                    animation: isRb ? 'sg-rainbow 4s linear infinite' : null,
+                    color: '#fff', font: "700 11px 'Noto Sans SC'", cursor: 'pointer',
+                    textShadow: '0 1px 1px rgba(0,0,0,0.2)',
+                  }}>{r}</button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: '#8a9a85' }}>
+              点档次按钮 → 创建一朵该档次的花 → 自动进花田选空位种下
+            </div>
+            <button onClick={onWipe} style={{...btnStyle, marginTop: 4, borderColor: '#c2453c', color: '#c2453c'}}>
               🗑️ 清空本机（重走欢迎页）
             </button>
           </div>
@@ -1971,7 +1983,7 @@ Object.assign(window, {
   WelcomeScreen, NewFamilyOnboarding, JoinFamilyFlow,
   TodayScreen, FoodPicker,
   SchoolSheet, OverageModal, HistoryScreen, DayDetail, TrendScreen, SettingsScreen,
-  SpinWheel, PlantYesterday, FlowerField,
+  SpinWheel, FlowerField,
   RarityFrame, RarityBadge, StarRating, QualityFx, WindLeaves,
   DebugPanel,
   QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR, RAINBOW_LINEAR_LOOP,

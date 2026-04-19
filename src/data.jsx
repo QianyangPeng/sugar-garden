@@ -702,18 +702,25 @@ function debugResetTodaySpin(state) {
   return next;
 }
 
-// Creates a fake yesterday with a kept spin + no plantedAt, so PlantYesterday flow fires on reload.
+// Creates a fake unplanted past day with a kept spin of the given rarity.
+// Each call walks further back in time so the user can stack up plantings.
 function debugSeedYesterdayUnplanted(state, identity, rarity = 'SSR') {
-  const d = new Date(); d.setDate(d.getDate() - 1);
-  const yesterday = ymd(d);
   const speciesList = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === rarity);
   const speciesId = speciesList[Math.floor(Math.random() * speciesList.length)] || 'c-daisy';
+  // Find first past date that isn't already in state.days
+  let dateStr = null;
+  for (let delta = 1; delta < 365; delta++) {
+    const d = new Date(); d.setDate(d.getDate() - delta);
+    const cand = ymd(d);
+    if (!state.days[cand]) { dateStr = cand; break; }
+  }
+  if (!dateStr) return state;
   const now = Date.now();
-  const next = { ...state, days: { ...state.days, [yesterday]: {
-    date: yesterday, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [],
+  const next = { ...state, days: { ...state.days, [dateStr]: {
+    date: dateStr, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [],
     spin: { attempts: [{ rarity, speciesId }], keptIndex: 0, pullsAllocated: 3, updatedAt: now },
     plantedAt: null,
-  }}, lastOpenedDate: yesterday };   // trick first-open-today into running
+  }}};
   saveState(next);
   return next;
 }
@@ -737,7 +744,7 @@ Object.assign(window, {
   ageFromDob, defaultLimitByAge,
   ensureDay, addEntry, removeEntry, setSchoolSugar, updateSettings,
   addSpinAttempt, keepSpin, plantAt,
-  rollFlower, pullsForDate, qualityFromPacing, qualityForDay,
+  rollFlower, pullsForDate, qualityFromPacing, qualityForDay, hashStr,
   totalForDay, dayStatus, keptFlowerFor, unplantedSpunDates,
   monthData, trendData,
   mergeServerEntries, mergeServerSchoolSugar, mergeServerDayState, applyServerFamily,

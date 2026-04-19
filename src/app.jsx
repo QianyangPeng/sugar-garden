@@ -11,7 +11,6 @@ function App() {
   const [schoolOpen, setSchoolOpen] = useState(false);
   const [overageOpen, setOverageOpen] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState(null);
-  const [plantQueue, setPlantQueue] = useState([]);   // list of dates to plant from yesterday (FIFO)
   const [spinNeeded, setSpinNeeded] = useState(false);
   const [choice, setChoice] = useState(null);
   const [inviteFrag, setInviteFrag] = useState(() => parseInviteFragment());
@@ -59,8 +58,8 @@ function App() {
     return () => { cancelled = true; clearInterval(iv); window.removeEventListener('online', onOnline); };
   }, [identity]);
 
-  // ---- First-open-today: plant yesterday's kept flowers, then spin today ----
-  // Runs once per session after initial sync, when state.lastOpenedDate !== today.
+  // ---- First-open-today: route to field if unplanted days exist, then spin today ----
+  // FlowerField handles planting inline (no separate overlay).
   useEffect(() => {
     if (didBootRef.current) return;
     if (needWelcome || needOnboard) return;
@@ -68,7 +67,7 @@ function App() {
     didBootRef.current = true;
     const today = ymd(new Date());
     const unplanted = unplantedSpunDates(state);
-    if (unplanted.length) setPlantQueue(unplanted);
+    if (unplanted.length) setRoute('field');
     const todayDay = state.days[today];
     const todaySpinLocked = todayDay?.spin?.keptIndex != null;
     if (!todaySpinLocked && state.lastOpenedDate !== today) {
@@ -159,7 +158,6 @@ function App() {
     setIdentity(null);
     setState(defaultState());
     setRoute('today');
-    setPlantQueue([]);
     setSpinNeeded(false);
     setChoice(null);
     setInviteFrag(parseInviteFragment());
@@ -214,10 +212,11 @@ function App() {
     );
   }
 
-  // ---- Daily flow overlays (plant yesterday → spin today → main) ----
-
-  const plantDate = plantQueue[0];
+  // ---- Daily flow (plant yesterday handled in-field; spin today as overlay) ----
   const todayDate = ymd(new Date());
+  // If any past day is unplanted, the field handles planting first — don't pop
+  // the SpinWheel on top of that.
+  const hasUnplanted = unplantedSpunDates(state).length > 0;
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -236,6 +235,7 @@ function App() {
       {route === 'field' && (
         <FlowerField
           state={state}
+          setState={setState}
           onClose={() => setRoute('today')}
           onOpenHistory={() => setRoute('history')}
         />
@@ -273,16 +273,8 @@ function App() {
         name={state.settings.childName || '小宝贝'}
       />
 
-      {/* Daily ceremonies (highest z-index): plant yesterday's flower, then spin today */}
-      {plantDate && (
-        <PlantYesterday
-          state={state}
-          setState={setState}
-          date={plantDate}
-          onDone={() => setPlantQueue(q => q.slice(1))}
-        />
-      )}
-      {!plantDate && spinNeeded && (
+      {/* Spin today overlay (planting happens inside FlowerField now) */}
+      {spinNeeded && !hasUnplanted && (
         <SpinWheel
           state={state}
           setState={setState}
@@ -303,9 +295,8 @@ function App() {
           }}
           onSeedYesterday={(rarity) => {
             setState(s => debugSeedYesterdayUnplanted(s, identity, rarity));
-            // re-run first-open-today to pick up the new unplanted date
-            didBootRef.current = false;
-            setPlantQueue(unplantedSpunDates(debugSeedYesterdayUnplanted(state, identity, rarity)));
+            // Route straight to the flower field so plant mode picks up the new unplanted date.
+            setRoute('field');
           }}
           onWipe={() => {
             if (!confirm('清空本机所有数据？(云端数据不变)')) return;
