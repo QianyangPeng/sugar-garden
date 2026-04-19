@@ -345,31 +345,31 @@ function renderFlowerHead(shape, petal, center, quality) {
         <path d="M -4 0 L 0 -6 L 4 0 Z" fill="#c2453c" />
       </>);
 
-    // R — 薰衣草：垂直小花穗
+    // R — 薰衣草：垂直小花穗（cluster ends flush with stem top at y=10）
     case 'lavender':
       return g(<>
-        <line x1="0" y1="-24" x2="0" y2="6" stroke="#6f2bb5" strokeWidth="1.2" />
-        {[-22, -16, -10, -4, 2].map((y, i) => (
+        <line x1="0" y1="-18" x2="0" y2="10" stroke="#6f2bb5" strokeWidth="1.2" />
+        {[-16, -10, -4, 2, 8].map((y, i) => (
           <g key={i} transform={`translate(0 ${y})`}>
             <circle cx="-4.5" cy="0" r="3" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="0.8" />
             <circle cx="4.5" cy="0" r="3" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="0.8" />
             <circle cx="0" cy="-1.5" r="3.5" fill={petal} stroke="#6f2bb5" strokeWidth="0.8" />
           </g>
         ))}
-        <circle cx="0" cy="-27" r="2" fill="#b892ff" stroke="#6f2bb5" strokeWidth="0.6" />
+        <circle cx="0" cy="-20" r="2" fill="#b892ff" stroke="#6f2bb5" strokeWidth="0.6" />
       </>);
 
-    // R — 鸢尾：3 瓣立起 + 3 瓣下垂
+    // R — 鸢尾：3 瓣立起 + 3 瓣下垂（scaled up ~25% to match other R flowers）
     case 'iris':
       return g(<>
         {[-35, 0, 35].map(a => (
-          <path key={'u'+a} d="M 0 0 L -3.5 -10 Q 0 -24 3.5 -10 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform={`rotate(${a})`} />
+          <path key={'u'+a} d="M 0 0 L -5 -12 Q 0 -28 5 -12 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" transform={`rotate(${a})`} />
         ))}
         {[145, 180, 215].map(a => (
-          <path key={'d'+a} d="M 0 0 L -4.5 8 Q 0 18 4.5 8 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" opacity="0.92" transform={`rotate(${a})`} />
+          <path key={'d'+a} d="M 0 0 L -5.5 10 Q 0 22 5.5 10 Z" fill={petal} stroke="#1c6fc2" strokeWidth="1.3" opacity="0.92" transform={`rotate(${a})`} />
         ))}
-        <path d="M 0 -2 L 0 6" stroke="#ffd24a" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx="0" cy="0" r="2.5" fill="#ffd24a" stroke="#1c6fc2" strokeWidth="0.8" />
+        <path d="M 0 -2 L 0 8" stroke="#ffd24a" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="0" cy="0" r="3.5" fill="#ffd24a" stroke="#1c6fc2" strokeWidth="1" />
       </>);
 
     // R — 绣球花：球状簇生小四瓣花
@@ -418,6 +418,128 @@ function renderFlowerHead(shape, petal, center, quality) {
         ))}
         <circle cx="0" cy="0" r="4.5" fill="#ffd24a" stroke="#1c6fc2" strokeWidth="1.1" />
         <circle cx="-1" cy="-1" r="1.4" fill="#fff2a8" />
+      </>);
+
+    // SR — 玫瑰：多层螺旋重瓣
+    case 'rose':
+      return g(<>
+        {[0, 60, 120, 180, 240, 300].map(a => (
+          <path key={'o'+a} d="M 0 0 Q -10 -6 -10 -16 Q 0 -22 10 -16 Q 10 -6 0 0 Z" fill={petal} stroke="#8a1824" strokeWidth="1.2" opacity="0.88" transform={`rotate(${a})`} />
+        ))}
+        {[30, 90, 150, 210, 270, 330].map(a => (
+          <path key={'m'+a} d="M 0 0 Q -7 -4 -7 -12 Q 0 -16 7 -12 Q 7 -4 0 0 Z" fill={petal} stroke="#8a1824" strokeWidth="1" opacity="0.96" transform={`rotate(${a})`} />
+        ))}
+        <path d="M -5 -2 Q -5 -8 0 -10 Q 5 -8 5 -2 Q 3 3 0 3 Q -3 3 -5 -2 Z" fill={petal} stroke="#8a1824" strokeWidth="1.2" />
+        <path d="M -3 -3 Q 0 -7 3 -3" stroke="#8a1824" strokeWidth="1" fill="none" />
+      </>);
+
+    // SR — 牡丹：极大多层蓬松粉色花
+    case 'peony':
+      return g(<>
+        {[0, 40, 80, 120, 160, 200, 240, 280, 320].map(a => (
+          <ellipse key={'o'+a} cx="0" cy="-16" rx="7" ry="11" fill={petal} stroke="#d4458a" strokeWidth="1" opacity="0.86" transform={`rotate(${a})`} />
+        ))}
+        {[20, 60, 100, 140, 180, 220, 260, 300, 340].map(a => (
+          <ellipse key={'m'+a} cx="0" cy="-10" rx="6" ry="8" fill={petal} stroke="#d4458a" strokeWidth="0.9" transform={`rotate(${a})`} />
+        ))}
+        {[0, 45, 90, 135, 180, 225, 270, 315].map(a => (
+          <ellipse key={'i'+a} cx="0" cy="-5" rx="3.5" ry="5" fill="#fff" opacity="0.45" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="4" fill="#ffd24a" stroke="#d4458a" strokeWidth="1" />
+      </>);
+
+    // SR — 兰花：3 大瓣 + 紫唇瓣 + 花斑
+    case 'orchid':
+      return g(<>
+        <ellipse cx="0" cy="-14" rx="7" ry="13" fill="#ead5ff" stroke="#6f2bb5" strokeWidth="1.3" />
+        <ellipse cx="0" cy="-14" rx="7" ry="13" fill="#ead5ff" stroke="#6f2bb5" strokeWidth="1.3" transform="rotate(120)" />
+        <ellipse cx="0" cy="-14" rx="7" ry="13" fill="#ead5ff" stroke="#6f2bb5" strokeWidth="1.3" transform="rotate(240)" />
+        <ellipse cx="-11" cy="-2" rx="4.5" ry="8" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="1" transform="rotate(-25)" />
+        <ellipse cx="11" cy="-2" rx="4.5" ry="8" fill="#d8b8f0" stroke="#6f2bb5" strokeWidth="1" transform="rotate(25)" />
+        <path d="M -6 4 Q -8 10 -6 14 Q 0 17 6 14 Q 8 10 6 4 Z" fill="#a259e0" stroke="#6f2bb5" strokeWidth="1.2" />
+        <circle cx="-1.5" cy="8" r="1.1" fill="#6f2bb5" />
+        <circle cx="2" cy="10" r="0.9" fill="#6f2bb5" />
+        <circle cx="0" cy="0" r="2.5" fill="#ffd24a" stroke="#6f2bb5" strokeWidth="0.8" />
+      </>);
+
+    // SSR — 蝴蝶兰：花瓣如蝶翼
+    case 'butterfly':
+      return g(<>
+        <path d="M 0 0 Q -14 -12 -20 -8 Q -22 -2 -14 2 Z" fill={petal} stroke="#c86f00" strokeWidth="1.3" />
+        <path d="M 0 0 Q 14 -12 20 -8 Q 22 -2 14 2 Z" fill={petal} stroke="#c86f00" strokeWidth="1.3" />
+        <path d="M 0 0 Q -12 8 -18 14 Q -14 20 -6 16 Z" fill="#ffe8a8" stroke="#c86f00" strokeWidth="1.3" />
+        <path d="M 0 0 Q 12 8 18 14 Q 14 20 6 16 Z" fill="#ffe8a8" stroke="#c86f00" strokeWidth="1.3" />
+        <circle cx="-10" cy="-4" r="2" fill="#c86f00" opacity="0.55" />
+        <circle cx="10" cy="-4" r="2" fill="#c86f00" opacity="0.55" />
+        <circle cx="-9" cy="11" r="1.3" fill="#c86f00" opacity="0.45" />
+        <circle cx="9" cy="11" r="1.3" fill="#c86f00" opacity="0.45" />
+        <path d="M 0 -7 Q -2 0 0 9 Q 2 0 0 -7 Z" fill="#7c4a1d" stroke="#2b2033" strokeWidth="0.8" />
+        <circle cx="0" cy="-5" r="1.5" fill="#2b2033" />
+      </>);
+
+    // SSR — 莲花：粉瓣层叠 + 水纹
+    case 'lotus':
+      return g(<>
+        <ellipse cx="0" cy="14" rx="18" ry="3" fill="none" stroke="#7ec4ff" strokeWidth="0.8" opacity="0.5" />
+        <ellipse cx="0" cy="16" rx="14" ry="2" fill="none" stroke="#7ec4ff" strokeWidth="0.7" opacity="0.35" />
+        {[0, 60, 120, 180, 240, 300].map(a => (
+          <path key={'o'+a} d="M 0 0 Q -8 -10 0 -22 Q 8 -10 0 0 Z" fill={petal} stroke="#c86f00" strokeWidth="1.2" transform={`rotate(${a})`} />
+        ))}
+        {[30, 90, 150, 210, 270, 330].map(a => (
+          <path key={'i'+a} d="M 0 0 Q -6 -7 0 -16 Q 6 -7 0 0 Z" fill="#ffd4e8" stroke="#c86f00" strokeWidth="1" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="4" fill="#ffd24a" stroke="#c86f00" strokeWidth="1" />
+        <circle cx="-1" cy="-1" r="1.5" fill="#fff" opacity="0.8" />
+      </>);
+
+    // SSR — 蒲公英球：绒球 + 飘散种子
+    case 'dandelion':
+      return g(<>
+        <circle cx="0" cy="0" r="3" fill="#7c4a1d" stroke="#2b2033" strokeWidth="0.5" />
+        {Array.from({length: 24}).map((_, i) => {
+          const a = (i * 15) * Math.PI / 180;
+          const r = 14, x2 = Math.cos(a) * r, y2 = Math.sin(a) * r;
+          return (
+            <g key={i}>
+              <line x1="0" y1="0" x2={x2 * 0.7} y2={y2 * 0.7} stroke="#d4d4d4" strokeWidth="0.6" />
+              <circle cx={x2} cy={y2} r="2" fill="#fff" stroke="#c4c4c4" strokeWidth="0.5" opacity="0.9" />
+            </g>
+          );
+        })}
+        <g>
+          <circle cx="22" cy="-8" r="2" fill="#fff" stroke="#c4c4c4" strokeWidth="0.4" opacity="0.75">
+            <animate attributeName="cx" values="22;34" dur="4s" repeatCount="indefinite" />
+            <animate attributeName="cy" values="-8;-20" dur="4s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.8;0" dur="4s" repeatCount="indefinite" />
+          </circle>
+        </g>
+        <g>
+          <circle cx="-16" cy="10" r="2" fill="#fff" stroke="#c4c4c4" strokeWidth="0.4" opacity="0.75">
+            <animate attributeName="cx" values="-16;-28" dur="3.5s" begin="1.5s" repeatCount="indefinite" />
+            <animate attributeName="cy" values="10;22" dur="3.5s" begin="1.5s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.8;0" dur="3.5s" begin="1.5s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      </>);
+
+    // SSR — 火焰花：火焰形瓣 + 热浪抖动
+    case 'flame':
+      return g(<>
+        <path d="M 0 10 Q -12 0 -10 -10 Q 0 -22 10 -10 Q 12 0 0 10 Z" fill="#ffb085" stroke="#b02800" strokeWidth="1" opacity="0.85" transform="rotate(-22)" />
+        <path d="M 0 10 Q -12 0 -10 -10 Q 0 -22 10 -10 Q 12 0 0 10 Z" fill="#ffb085" stroke="#b02800" strokeWidth="1" opacity="0.85" transform="rotate(22)" />
+        <path d="M 0 10 Q -10 0 -6 -12 Q -2 -22 0 -26 Q 2 -22 6 -12 Q 10 0 0 10 Z" fill={petal} stroke="#b02800" strokeWidth="1.3" />
+        <path d="M 0 6 Q -4 -2 -3 -8 Q 0 -14 3 -8 Q 4 -2 0 6 Z" fill="#ffd24a" stroke="#c86f00" strokeWidth="1">
+          <animate attributeName="d" values="M 0 6 Q -4 -2 -3 -8 Q 0 -14 3 -8 Q 4 -2 0 6 Z;M 0 6 Q -5 -2 -2 -10 Q 0 -13 2 -10 Q 5 -2 0 6 Z;M 0 6 Q -4 -2 -3 -8 Q 0 -14 3 -8 Q 4 -2 0 6 Z" dur="0.8s" repeatCount="indefinite" />
+        </path>
+        <circle cx="-10" cy="-16" r="1.5" fill="#ffd24a" opacity="0.6">
+          <animate attributeName="opacity" values="0.3;0.9;0.3" dur="1.2s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="12" cy="-18" r="1" fill="#ffd24a" opacity="0.5">
+          <animate attributeName="opacity" values="0.2;0.8;0.2" dur="1.5s" begin="0.3s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="-14" cy="-8" r="0.8" fill="#ffd24a" opacity="0.4">
+          <animate attributeName="opacity" values="0.2;0.7;0.2" dur="1.8s" begin="0.6s" repeatCount="indefinite" />
+        </circle>
       </>);
 
     // UR — 星光花：十芒星射线 + 脉动内核

@@ -100,14 +100,21 @@ const FLOWERS = {
   'r-violet':     { name: '紫罗兰',   rarity: 'R',    petal: '#9470d0', center: '#ffd24a', shape: 'violet',    desc: '五瓣心形，上浅下深' },
   'r-forgetmenot':{ name: '勿忘我',   rarity: 'R',    petal: '#7ec4ff', center: '#ffd24a', shape: 'forgetmenot',desc: '五圆蓝瓣 + 亮黄花心' },
 
-  // SR (3) — 超稀，紫色
+  // SR (6) — 超稀，紫色
   'r-moonflower': { name: '月光花',   rarity: 'SR',   petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower',desc: '只在糖分很少的夜晚开放' },
   'r-stardust':   { name: '星砂花',   rarity: 'SR',   petal: '#2b2058', center: '#ffd24a', shape: 'stardust',  desc: '花瓣上带着星星' },
   'u-sakura':     { name: '樱花',     rarity: 'SR',   petal: '#ffc7d8', center: '#ffffff', shape: 'sakura',    desc: '温柔的粉色五瓣' },
+  's-rose':       { name: '玫瑰',     rarity: 'SR',   petal: '#d94560', center: '#8a1824', shape: 'rose',      desc: '多层螺旋的经典重瓣' },
+  's-peony':      { name: '牡丹',     rarity: 'SR',   petal: '#ffa6cd', center: '#ffd24a', shape: 'peony',     desc: '国色天香，蓬松大花' },
+  's-orchid':     { name: '兰花',     rarity: 'SR',   petal: '#ead5ff', center: '#ffd24a', shape: 'orchid',    desc: '三大瓣 + 紫唇，清雅幽香' },
 
-  // SSR (2) — 极稀，橙色
+  // SSR (6) — 极稀，橙色
   'r-rainbowlily':{ name: '彩虹百合', rarity: 'SSR',  petal: 'rainbow', center: '#ffd24a', shape: 'rainbowlily',desc: '承载着今天的好心情' },
   'u-phoenix':    { name: '凤凰花',   rarity: 'SSR',  petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',   desc: '展翅火红的传说' },
+  's-butterfly':  { name: '蝴蝶兰',   rarity: 'SSR',  petal: '#ffb085', center: '#c86f00', shape: 'butterfly', desc: '花瓣如蝶翼展开' },
+  's-lotus':      { name: '莲花',     rarity: 'SSR',  petal: '#ffc4dc', center: '#ffd24a', shape: 'lotus',     desc: '佛国圣花，粉瓣层叠临水' },
+  's-dandelion':  { name: '蒲公英球', rarity: 'SSR',  petal: '#ffffff', center: '#7c4a1d', shape: 'dandelion', desc: '种子乘风飞向远方' },
+  's-flame':      { name: '火焰花',   rarity: 'SSR',  petal: '#ff5c2a', center: '#ffd24a', shape: 'flame',     desc: '燃烧如火，热浪升腾' },
 
   // UR (2) — 传说，彩虹色
   'ur-starlight': { name: '星光花',   rarity: 'UR',   petal: '#ffd24a', center: '#fff5a0', shape: 'starlight', desc: '传说中只在完美的日子绽放' },
