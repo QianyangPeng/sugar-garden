@@ -1829,12 +1829,78 @@ function Field({ label, children }) {
   );
 }
 
+// ============ DEBUG PANEL (only shown when URL has ?debug=1) ============
+function DebugPanel({ state, identity, onForceRarity, onResetToday, onSeedYesterday, onWipe }) {
+  const [open, setOpen] = useState(false);
+  const forceRarity = state.debug?.forceRarity;
+  const btnStyle = {
+    padding: '8px 10px', borderRadius: 10, border: '1.5px solid #23331f',
+    background: '#fff', font: "600 12px 'Noto Sans SC'", cursor: 'pointer', textAlign: 'left',
+  };
+  return (
+    <>
+      <button onClick={() => setOpen(!open)} style={{
+        position: 'fixed', top: 10, left: 10, zIndex: 200,
+        width: 40, height: 40, borderRadius: '50%', border: '2px solid #23331f',
+        background: '#fff59a', fontSize: 20, cursor: 'pointer', boxShadow: '0 2px 0 #23331f',
+      }} title="Debug">🐞</button>
+      {open && (
+        <div style={{
+          position: 'fixed', top: 60, left: 10, zIndex: 200,
+          width: 270, background: '#fff', border: '2.5px solid #23331f', borderRadius: 16,
+          padding: 14, boxShadow: '0 4px 0 #23331f',
+          font: "500 12px 'Noto Sans SC'",
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🐞 Debug Panel</div>
+          <div style={{ color: '#8a9a85', fontSize: 10, marginBottom: 10 }}>
+            ?debug=1 模式：同步已暂停，改动仅本地
+          </div>
+
+          <div style={{ margin: '6px 0 4px', fontWeight: 600, fontSize: 11 }}>强制下次抽卡稀有度：</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {RARITY_ORDER.map(r => (
+              <button key={r} onClick={() => onForceRarity(r)} style={{
+                flex: 1, padding: '6px 2px', borderRadius: 8,
+                border: forceRarity === r ? '2px solid #c2453c' : '1.5px solid #23331f',
+                background: forceRarity === r ? '#fff0ee' : '#fff',
+                font: "700 11px 'Noto Sans SC'", cursor: 'pointer',
+              }}>{r}</button>
+            ))}
+          </div>
+          {forceRarity && (
+            <div style={{ color: '#c2453c', fontSize: 10, marginTop: 4 }}>
+              ✓ 下次抽卡会强制 {forceRarity}（用后自动清除）
+            </div>
+          )}
+
+          <div style={{ margin: '14px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button onClick={onResetToday} style={btnStyle}>🎰 重抽今日（清今日 spin）</button>
+            <button onClick={() => onSeedYesterday('SSR')} style={btnStyle}>🌱 造未种昨天 · SSR</button>
+            <button onClick={() => onSeedYesterday('UR')} style={btnStyle}>🌱 造未种昨天 · UR</button>
+            <button onClick={onWipe} style={{...btnStyle, borderColor: '#c2453c', color: '#c2453c'}}>
+              🗑️ 清空本机（重走欢迎页）
+            </button>
+          </div>
+
+          {identity && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #ddd',
+              fontSize: 10, color: '#8a9a85', wordBreak: 'break-all' }}>
+              family: <code>{identity.familyId?.slice(0,8)}</code> · member: <code>{identity.memberName}</code>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 Object.assign(window, {
   WelcomeScreen, NewFamilyOnboarding, JoinFamilyFlow,
   TodayScreen, FoodPicker,
   SchoolSheet, OverageModal, HistoryScreen, DayDetail, TrendScreen, SettingsScreen,
   SpinWheel, PlantYesterday, FlowerField,
   RarityFrame, RarityBadge, StarRating, QualityFx, WindLeaves,
+  DebugPanel,
   QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR, RAINBOW_LINEAR_LOOP,
   EntryList,
 });

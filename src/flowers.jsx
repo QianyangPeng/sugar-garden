@@ -542,6 +542,111 @@ function renderFlowerHead(shape, petal, center, quality) {
         </circle>
       </>);
 
+    // N — 菊花：多层金黄放射状
+    case 'chrysanthemum':
+      return g(<>
+        {Array.from({length: 16}).map((_, i) => {
+          const a = i * 22.5;
+          return <path key={'o'+i} d="M 0 0 L -2 -10 Q 0 -22 2 -10 Z" fill={petal} stroke="#c28c1f" strokeWidth="0.8" transform={`rotate(${a})`} />;
+        })}
+        {Array.from({length: 12}).map((_, i) => {
+          const a = i * 30 + 15;
+          return <path key={'i'+i} d="M 0 0 L -1.5 -6 Q 0 -14 1.5 -6 Z" fill="#ffec8a" stroke="#c28c1f" strokeWidth="0.6" transform={`rotate(${a})`} />;
+        })}
+        <circle cx="0" cy="0" r="4" fill="#c28c1f" stroke="#7c4a1d" strokeWidth="0.8" />
+      </>);
+
+    // SSR — 雪绒花：绒毛白星形 + 雪花飘落
+    case 'edelweiss':
+      return g(<>
+        {[0, 60, 120, 180, 240, 300].map(a => (
+          <path key={a} d="M 0 0 Q -4 -8 -2 -18 Q 0 -22 2 -18 Q 4 -8 0 0 Z" fill="#ffffff" stroke="#a89868" strokeWidth="1" transform={`rotate(${a})`} />
+        ))}
+        {[30, 90, 150, 210, 270, 330].map(a => (
+          <path key={'i'+a} d="M 0 0 Q -3 -5 -1.5 -12 Q 0 -14 1.5 -12 Q 3 -5 0 0 Z" fill="#f5ead4" stroke="#a89868" strokeWidth="0.7" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="4" fill="#ffd24a" stroke="#c28c1f" strokeWidth="0.8" />
+        {[0, 72, 144, 216, 288].map(a => (
+          <circle key={'d'+a} cx="0" cy="-2" r="1.2" fill="#ffd24a" stroke="#c28c1f" strokeWidth="0.4" transform={`rotate(${a})`} />
+        ))}
+        <g stroke="#7ec4ff" strokeWidth="0.5" fill="none">
+          <g transform="translate(-18 -10)">
+            <path d="M -2 0 L 2 0 M 0 -2 L 0 2 M -1.5 -1.5 L 1.5 1.5 M -1.5 1.5 L 1.5 -1.5">
+              <animate attributeName="opacity" values="0;0.9;0" dur="3s" repeatCount="indefinite" />
+            </path>
+          </g>
+          <g transform="translate(20 6)">
+            <path d="M -2 0 L 2 0 M 0 -2 L 0 2 M -1.5 -1.5 L 1.5 1.5 M -1.5 1.5 L 1.5 -1.5">
+              <animate attributeName="opacity" values="0;0.9;0" dur="3.5s" begin="1.5s" repeatCount="indefinite" />
+            </path>
+          </g>
+        </g>
+      </>);
+
+    // UR — 极光花：极光飘带 + 中心光点
+    case 'aurora':
+      return g(<>
+        {[{a:0,c:'#7ad9b5'},{a:45,c:'#5fb7c7'},{a:90,c:'#7ec4ff'},{a:135,c:'#b892ff'},{a:180,c:'#7ad9b5'},{a:225,c:'#5fb7c7'},{a:270,c:'#7ec4ff'},{a:315,c:'#b892ff'}].map((p,i) => (
+          <path key={i} d="M 0 0 Q -5 -8 0 -20 Q 5 -8 0 0 Z" fill={p.c} stroke="#2b2033" strokeWidth="0.5" opacity="0.8" transform={`rotate(${p.a})`}>
+            <animate attributeName="opacity" values="0.35;0.9;0.35" dur={`${2 + (i % 3) * 0.5}s`} begin={`${i * 0.18}s`} repeatCount="indefinite" />
+          </path>
+        ))}
+        <circle cx="0" cy="0" r="6" fill="#e0ecff" stroke="#7ec4ff" strokeWidth="0.8" />
+        <circle cx="0" cy="0" r="3" fill="#fff">
+          <animate attributeName="r" values="2.5;4.2;2.5" dur="2s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="14" cy="0" r="1.5" fill="#7ad9b5">
+          <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="5s" repeatCount="indefinite" />
+        </circle>
+      </>);
+
+    // UR — 曼珠沙华：红色卷瓣 + 长花蕊 + 红色粒子
+    case 'spider-lily':
+      return g(<>
+        {[0, 60, 120, 180, 240, 300].map(a => (
+          <path key={a} d="M 0 0 Q -7 -6 -3 -14 Q 0 -20 3 -16 Q 5 -9 2 -4 Q 0 -2 0 0 Z" fill="#ff3050" stroke="#8a1824" strokeWidth="1.1" transform={`rotate(${a})`} />
+        ))}
+        {[15, 45, 75, 105, 165, 195, 255, 285, 345].map(a => (
+          <path key={'s'+a} d="M 0 0 Q -2 -12 0 -22" stroke="#ff5070" strokeWidth="0.7" fill="none" transform={`rotate(${a})`} />
+        ))}
+        {[15, 45, 75, 105, 165, 195, 255, 285, 345].map(a => (
+          <circle key={'t'+a} cx="0" cy="-22" r="0.9" fill="#ffd24a" transform={`rotate(${a})`} />
+        ))}
+        <circle cx="0" cy="0" r="3" fill="#8a1824" />
+        <circle cx="-18" cy="-6" r="1.3" fill="#ff3050" opacity="0.6">
+          <animate attributeName="cy" values="-6;-20" dur="3s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.2;0.8;0" dur="3s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="17" cy="6" r="1.1" fill="#ff3050" opacity="0.6">
+          <animate attributeName="cy" values="6;-12" dur="3.5s" begin="1s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.2;0.8;0" dur="3.5s" begin="1s" repeatCount="indefinite" />
+        </circle>
+      </>);
+
+    // UR — 月桂冠花：金色桂冠环 + 放射光芒
+    case 'laurel':
+      return g(<>
+        {Array.from({length: 12}).map((_, i) => {
+          const a = i * 30;
+          return <path key={'r'+i} d="M 0 -8 L -1.2 -24 L 1.2 -24 Z" fill="#ffd24a" opacity="0.5" transform={`rotate(${a})`}>
+            <animate attributeName="opacity" values="0.3;0.75;0.3" dur={`${1.6 + (i%2)*0.4}s`} begin={`${i*0.1}s`} repeatCount="indefinite" />
+          </path>;
+        })}
+        {Array.from({length: 12}).map((_, i) => {
+          const a = i * 30;
+          return (
+            <g key={'l'+i} transform={`rotate(${a}) translate(0 -14)`}>
+              <ellipse cx="0" cy="0" rx="3" ry="6" fill="#d4a83a" stroke="#7c4a1d" strokeWidth="0.6" transform="rotate(-15)" />
+              <path d="M 0 -5 L 0 5" stroke="#7c4a1d" strokeWidth="0.5" />
+            </g>
+          );
+        })}
+        <path d="M 0 -6 L 1.5 -1.5 L 6 0 L 1.5 1.5 L 0 6 L -1.5 1.5 L -6 0 L -1.5 -1.5 Z" fill="#fff5a0" stroke="#ffd24a" strokeWidth="0.8">
+          <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
+        </path>
+        <circle cx="0" cy="0" r="2" fill="#fff" />
+      </>);
+
     // UR — 星光花：十芒星射线 + 脉动内核
     case 'starlight':
       return g(<>

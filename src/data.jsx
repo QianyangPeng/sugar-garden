@@ -80,7 +80,7 @@ const DEFAULT_PULLS = 3;
 
 // -------- Flower species (20 total across 5 tiers) --------
 const FLOWERS = {
-  // N (8) — 普通，最常见
+  // N (10) — 普通，最常见
   'c-tulip':      { name: '郁金香',   rarity: 'N',    petal: '#ff9ec4', center: '#ffd24a', shape: 'tulip',     desc: '经典合抱五瓣' },
   'c-daisy':      { name: '雏菊',     rarity: 'N',    petal: '#f2e9ff', center: '#ffd24a', shape: 'daisy',     desc: '淡紫白八瓣' },
   'c-sunflower':  { name: '向日葵',   rarity: 'N',    petal: '#ffd24a', center: '#7c4a1d', shape: 'sunflower', desc: '金黄十二瓣' },
@@ -89,6 +89,8 @@ const FLOWERS = {
   'c-marigold':   { name: '万寿菊',   rarity: 'N',    petal: '#ffb085', center: '#c2453c', shape: 'marigold',  desc: '橙红双层' },
   'c-bluebell':   { name: '风铃草',   rarity: 'N',    petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell',  desc: '蓝色钟铃' },
   'c-pansy':      { name: '三色堇',   rarity: 'N',    petal: '#b892ff', center: '#ffd24a', shape: 'pansy',     desc: '紫黄三色' },
+  's-dandelion':  { name: '蒲公英',   rarity: 'N',    petal: '#ffffff', center: '#7c4a1d', shape: 'dandelion', desc: '种子乘风飞向远方' },
+  'c-chrysanthemum':{ name: '菊花',   rarity: 'N',    petal: '#ffd24a', center: '#c28c1f', shape: 'chrysanthemum', desc: '金黄多层，秋之隽逸' },
 
   // R (8) — 稀有，蓝色
   'u-emerald':    { name: '翡翠花',   rarity: 'R',    petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',   desc: '翠绿菱形，坚毅绽放' },
@@ -113,12 +115,15 @@ const FLOWERS = {
   'u-phoenix':    { name: '凤凰花',   rarity: 'SSR',  petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',   desc: '展翅火红的传说' },
   's-butterfly':  { name: '蝴蝶兰',   rarity: 'SSR',  petal: '#ffb085', center: '#c86f00', shape: 'butterfly', desc: '花瓣如蝶翼展开' },
   's-lotus':      { name: '莲花',     rarity: 'SSR',  petal: '#ffc4dc', center: '#ffd24a', shape: 'lotus',     desc: '佛国圣花，粉瓣层叠临水' },
-  's-dandelion':  { name: '蒲公英球', rarity: 'SSR',  petal: '#ffffff', center: '#7c4a1d', shape: 'dandelion', desc: '种子乘风飞向远方' },
   's-flame':      { name: '火焰花',   rarity: 'SSR',  petal: '#ff5c2a', center: '#ffd24a', shape: 'flame',     desc: '燃烧如火，热浪升腾' },
+  's-edelweiss':  { name: '雪绒花',   rarity: 'SSR',  petal: '#ffffff', center: '#ffd24a', shape: 'edelweiss', desc: '阿尔卑斯之星，雪中白绒' },
 
-  // UR (2) — 传说，彩虹色
+  // UR (5) — 传说，彩虹色
   'ur-starlight': { name: '星光花',   rarity: 'UR',   petal: '#ffd24a', center: '#fff5a0', shape: 'starlight', desc: '传说中只在完美的日子绽放' },
   'ur-crystal':   { name: '琉璃花',   rarity: 'UR',   petal: '#ffffff', center: '#ffd24a', shape: 'crystal',   desc: '折射出所有颜色的水晶花' },
+  'ur-aurora':    { name: '极光花',   rarity: 'UR',   petal: '#7ad9b5', center: '#e0ecff', shape: 'aurora',    desc: '北极的梦幻之光' },
+  'ur-spiderlily':{ name: '曼珠沙华', rarity: 'UR',   petal: '#ff3050', center: '#8a1824', shape: 'spider-lily',desc: '彼岸的鲜红与金蕊' },
+  'ur-laurel':    { name: '月桂冠花', rarity: 'UR',   petal: '#ffd24a', center: '#fff5a0', shape: 'laurel',    desc: '胜利与荣耀的象征' },
 };
 
 // -------- Flower roll (gacha) --------
@@ -139,9 +144,11 @@ function rollSpecies(seed, rarity) {
   return list[pick];
 }
 // Composite: given familyId + date + pullIndex, produce a reproducible {rarity, speciesId}.
-function rollFlower(familyId, date, pullIndex) {
+// `forceRarity` (optional) lets debug-mode short-circuit the rarity roll; species is still
+// picked pseudo-randomly from that tier so repeated forced pulls vary visually.
+function rollFlower(familyId, date, pullIndex, forceRarity) {
   const seed = hashStr(`${familyId}:${date}:${pullIndex}:rarity`);
-  const rarity = rollRarity(seed);
+  const rarity = forceRarity && RARITY_META[forceRarity] ? forceRarity : rollRarity(seed);
   const speciesSeed = hashStr(`${familyId}:${date}:${pullIndex}:${rarity}`);
   const speciesId = rollSpecies(speciesSeed, rarity);
   return { rarity, speciesId, pullIndex };
@@ -405,13 +412,15 @@ function updateSettings(state, patch) {
 }
 
 // Record a spin attempt (for today). Appends to attempts history.
+// If state.debug.forceRarity is set, the rarity is overridden (and flag cleared).
 function addSpinAttempt(state, date, identity) {
   let next = ensureDay(state, date);
   const day = next.days[date];
   const attempts = day.spin?.attempts || [];
   const allocated = day.spin?.pullsAllocated ?? pullsForDate(state, date);
-  if (attempts.length >= allocated) return next;   // no pulls left
-  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length);
+  if (attempts.length >= allocated) return next;
+  const forceRarity = state.debug?.forceRarity || null;
+  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length, forceRarity);
   const now = Date.now();
   const newAttempts = [...attempts, { rarity: roll.rarity, speciesId: roll.speciesId }];
   next = { ...next, days: { ...next.days, [date]: {
@@ -424,6 +433,11 @@ function addSpinAttempt(state, date, identity) {
     },
     _spinPending: true,
   }}};
+  if (forceRarity) {
+    const newDebug = { ...(next.debug || {}) };
+    delete newDebug.forceRarity;
+    next = { ...next, debug: newDebug };
+  }
   saveState(next);
   return next;
 }
@@ -666,6 +680,52 @@ function markDayStateSynced(state, date) {
   return next;
 }
 
+// -------- Debug helpers (used only via ?debug=1) --------
+
+function debugIsEnabled() {
+  if (typeof location === 'undefined') return false;
+  return new URLSearchParams(location.search).has('debug');
+}
+
+function debugSetForceRarity(state, rarity) {
+  const next = { ...state, debug: { ...(state.debug || {}), forceRarity: rarity } };
+  saveState(next);
+  return next;
+}
+
+function debugResetTodaySpin(state) {
+  const today = ymd(new Date());
+  const day = state.days[today];
+  if (!day) return state;
+  const next = { ...state, days: { ...state.days, [today]: { ...day, spin: null, plantedAt: null } } };
+  saveState(next);
+  return next;
+}
+
+// Creates a fake yesterday with a kept spin + no plantedAt, so PlantYesterday flow fires on reload.
+function debugSeedYesterdayUnplanted(state, identity, rarity = 'SSR') {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  const yesterday = ymd(d);
+  const speciesList = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === rarity);
+  const speciesId = speciesList[Math.floor(Math.random() * speciesList.length)] || 'c-daisy';
+  const now = Date.now();
+  const next = { ...state, days: { ...state.days, [yesterday]: {
+    date: yesterday, schoolSugar: 0, schoolSugarUpdatedAt: 0, entries: [],
+    spin: { attempts: [{ rarity, speciesId }], keptIndex: 0, pullsAllocated: 3, updatedAt: now },
+    plantedAt: null,
+  }}, lastOpenedDate: yesterday };   // trick first-open-today into running
+  saveState(next);
+  return next;
+}
+
+function debugWipeLocal() {
+  try {
+    localStorage.removeItem(LS_STATE);
+    localStorage.removeItem(LS_IDENTITY);
+    localStorage.removeItem(LS_PENDING);
+  } catch {}
+}
+
 Object.assign(window, {
   FOOD_LIBRARY, CATEGORY_META, FLOWERS, SEGMENTS,
   RARITY_META, RARITY_ORDER, RARITY_PROB, PULLS_FOR_QUALITY, DEFAULT_PULLS,
@@ -682,4 +742,5 @@ Object.assign(window, {
   monthData, trendData,
   mergeServerEntries, mergeServerSchoolSugar, mergeServerDayState, applyServerFamily,
   markEntrySynced, markSchoolSynced, markSettingsSynced, markDayStateSynced,
+  debugIsEnabled, debugSetForceRarity, debugResetTodaySpin, debugSeedYesterdayUnplanted, debugWipeLocal,
 });

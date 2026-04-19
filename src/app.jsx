@@ -23,10 +23,12 @@ function App() {
 
   const needWelcome = !identity;
   const needOnboard = !!identity && !state.settings.onboarded;
+  const debugMode = debugIsEnabled();
 
-  // ---- Sync on mount + periodic ----
+  // ---- Sync on mount + periodic (skipped in debug mode so local changes stick) ----
   useEffect(() => {
     if (!identity) return;
+    if (debugMode) { firstSyncRef.current = true; setSyncStatus('offline'); return; }
     let cancelled = false;
     const tick = async () => {
       if (cancelled) return;
@@ -163,10 +165,10 @@ function App() {
     setInviteFrag(parseInviteFragment());
   }
 
-  // ---- Auto-push pending ops ----
+  // ---- Auto-push pending ops (also skipped in debug mode) ----
   const pushTimerRef = useRef(null);
   useEffect(() => {
-    if (!identity) return;
+    if (!identity || debugMode) return;
     const hasPending = state.settings._settingsPending ||
       Object.values(state.days).some(d =>
         d._schoolPending || d._spinPending || d._plantPending ||
@@ -287,6 +289,29 @@ function App() {
           identity={identity}
           date={todayDate}
           onDone={() => setSpinNeeded(false)}
+        />
+      )}
+
+      {debugMode && (
+        <DebugPanel
+          state={state}
+          identity={identity}
+          onForceRarity={(r) => setState(s => debugSetForceRarity(s, r))}
+          onResetToday={() => {
+            setState(s => debugResetTodaySpin(s));
+            setSpinNeeded(true);
+          }}
+          onSeedYesterday={(rarity) => {
+            setState(s => debugSeedYesterdayUnplanted(s, identity, rarity));
+            // re-run first-open-today to pick up the new unplanted date
+            didBootRef.current = false;
+            setPlantQueue(unplantedSpunDates(debugSeedYesterdayUnplanted(state, identity, rarity)));
+          }}
+          onWipe={() => {
+            if (!confirm('清空本机所有数据？(云端数据不变)')) return;
+            debugWipeLocal();
+            location.reload();
+          }}
         />
       )}
     </div>
