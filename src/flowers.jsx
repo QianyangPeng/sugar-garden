@@ -1,55 +1,122 @@
 // Flower rendering (SVG). Each shape takes props: { size, quality, species, animate }.
 // quality: 'perfect' | 'great' | 'ok' | 'okish' | 'wilted' | 'dead' | 'bud'
 // 'bud' is used for the currently-growing (today's) flower.
+//
+// Animation layers (applied together when animate=true):
+//  1. Petal sway    — inner <g>, ±2° rotate on the flower head, 3.2s cycle
+//  2. Whole-flower sway ("wind") — outer <g class="sg-flower-body">,
+//     ±1.3° rotate about the stem base (50,140), 5.2s cycle.
+//     On `.sg-flower-card:hover .sg-flower-body` the amplitude jumps to ±4° and
+//     3 small leaf particles drift across — simulates a gust.
+
+// Inject shared flower CSS exactly once (both app and gallery pages share flowers.jsx).
+(function injectSharedFlowerStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('sg-flower-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'sg-flower-styles';
+  s.textContent = `
+    @keyframes sg-flower-head-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }
+    @keyframes sg-flower-head-sway-head { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
+    @keyframes sg-flower-wind-ambient {
+      0%,100% { transform: rotate(-1.3deg); }
+      50%     { transform: rotate(1.3deg); }
+    }
+    @keyframes sg-flower-wind-gust {
+      0%   { transform: rotate(0deg); }
+      15%  { transform: rotate(-5.5deg); }
+      35%  { transform: rotate(4deg); }
+      55%  { transform: rotate(-2.5deg); }
+      75%  { transform: rotate(1.5deg); }
+      100% { transform: rotate(0deg); }
+    }
+    .sg-flower-body {
+      transform-box: view-box;
+      transform-origin: 50px 140px;
+      animation: sg-flower-wind-ambient 5.2s ease-in-out infinite;
+    }
+    .sg-flower-body-head {
+      transform-box: fill-box;
+      transform-origin: center center;
+      animation: sg-flower-wind-ambient 5.2s ease-in-out infinite;
+    }
+    .sg-flower-card:hover .sg-flower-body,
+    .sg-flower-card:hover .sg-flower-body-head {
+      animation: sg-flower-wind-gust 1.4s ease-in-out infinite;
+    }
+    .sg-flower-card:active .sg-flower-body,
+    .sg-flower-card:active .sg-flower-body-head {
+      animation-duration: 0.8s;
+    }
+
+    /* Wind-gust particles (tiny leaves drifting left-to-right). Hidden by default. */
+    .sg-wind-leaf {
+      position: absolute; top: 0; left: 0;
+      width: 14px; height: 10px; opacity: 0; pointer-events: none;
+      background: radial-gradient(ellipse at 30% 50%, #7ab985 0%, #5a8f5e 60%, transparent 65%);
+      border-radius: 55% 35% 55% 35% / 60% 30% 70% 40%;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+    }
+    .sg-flower-card:hover .sg-wind-leaf { animation: sg-wind-leaf-drift 1.8s linear infinite; }
+    .sg-flower-card:hover .sg-wind-leaf:nth-child(2) { animation-delay: 0.6s; animation-duration: 2.1s; }
+    .sg-flower-card:hover .sg-wind-leaf:nth-child(3) { animation-delay: 1.2s; animation-duration: 1.6s; }
+    @keyframes sg-wind-leaf-drift {
+      0%   { opacity: 0; transform: translate(-10%, 40%) rotate(-20deg); }
+      20%  { opacity: 0.85; }
+      80%  { opacity: 0.85; }
+      100% { opacity: 0; transform: translate(120%, 20%) rotate(40deg); }
+    }
+  `;
+  document.head.appendChild(s);
+})();
 
 function FlowerSVG({ size = 100, species, quality = 'great', animate = false, style, headOnly = false }) {
   const s = size;
   const f = species ? FLOWERS[species] : null;
 
-  // Wilted / dead / bud are rendered independent of species color (except soil/stem)
-  if (quality === 'dead') return <DeadSprig size={s} style={style} />;
-  if (quality === 'wilted') return <WiltedFlower size={s} style={style} petal={f?.petal || '#a88968'} />;
+  if (quality === 'dead') return <DeadSprig size={s} style={style} animate={animate} />;
+  if (quality === 'wilted') return <WiltedFlower size={s} style={style} petal={f?.petal || '#a88968'} animate={animate} />;
   if (quality === 'bud') return <BudGrowing size={s} style={style} headOnly={headOnly} />;
 
-  // Fallback species
   const shape = f?.shape || 'daisy';
   const petal = f?.petal || '#ff9ec4';
   const center = f?.center || '#ffd24a';
 
-  // Animation note: CSS `transform: rotate(...)` on an SVG <g> overrides the SVG
-  // `transform="translate(...) scale(...)"` attribute — that's why we split into
-  // an outer static <g> (positioning/scaling via SVG attr) and an inner animated <g>
-  // (CSS transform for sway only). `transform-box: fill-box` makes rotation happen
-  // around the element's own bounding-box center, not the SVG root origin.
-  const swayStyle = animate ? {
+  // Inner petal sway (rotate only — quirks described at file top).
+  const petalSwayStyle = animate ? {
     transformBox: 'fill-box',
     transformOrigin: 'center',
-    animation: 'flower-sway 3.2s ease-in-out infinite',
+    animation: `${headOnly ? 'sg-flower-head-sway-head' : 'sg-flower-head-sway'} 3.2s ease-in-out infinite`,
   } : null;
 
+  // Stem tilt displacement: stem top is at x = 50 + tilt * 1.4 (see <Stem> below).
+  const tilt = quality === 'okish' ? 12 : quality === 'ok' ? 4 : 0;
+  const headX = 50 + tilt * 1.4;
+
   if (headOnly) {
-    // Tight square viewBox — for hero usage where we don't want a long stem
     return (
       <svg viewBox="-40 -40 80 80" width={s} height={s} style={style}>
-        <g transform={`scale(${quality === 'perfect' ? 1.18 : 1.1}) rotate(${quality === 'okish' ? -8 : 0})`}>
-          <g style={swayStyle}>
-            {renderFlowerHead(shape, petal, center, quality)}
+        <g className={animate ? 'sg-flower-body-head' : undefined}>
+          <g transform={`scale(${quality === 'perfect' ? 1.18 : 1.1}) rotate(${quality === 'okish' ? -8 : 0})`}>
+            <g style={petalSwayStyle}>
+              {renderFlowerHead(shape, petal, center, quality)}
+            </g>
           </g>
         </g>
-        {animate && <style>{`@keyframes flower-sway { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }`}</style>}
       </svg>
     );
   }
 
   return (
     <svg viewBox="0 0 100 140" width={s} height={s * 1.4} style={style}>
-      <Stem tilt={quality === 'okish' ? 12 : quality === 'ok' ? 4 : 0} />
-      <g transform={`translate(50 40) scale(${quality === 'perfect' ? 1.06 : 1}) rotate(${quality === 'okish' ? -8 : 0})`}>
-        <g style={swayStyle}>
-          {renderFlowerHead(shape, petal, center, quality)}
+      <g className={animate ? 'sg-flower-body' : undefined}>
+        <Stem tilt={tilt} />
+        <g transform={`translate(${headX} 40) scale(${quality === 'perfect' ? 1.06 : 1}) rotate(${quality === 'okish' ? -8 : 0})`}>
+          <g style={petalSwayStyle}>
+            {renderFlowerHead(shape, petal, center, quality)}
+          </g>
         </g>
       </g>
-      {animate && <style>{`@keyframes flower-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }`}</style>}
     </svg>
   );
 }

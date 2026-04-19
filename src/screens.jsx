@@ -5,9 +5,58 @@ const { useState, useEffect, useRef, useMemo } = React;
 // Used in home card, spin wheel, calendar cells, flower field, gallery.
 const RAINBOW_BG = 'conic-gradient(from 0deg, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c)';
 const RAINBOW_LINEAR = 'linear-gradient(90deg, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c)';
+// Seamless looping gradient (starts and ends with the same red, tile-safe under 400% size).
+const RAINBOW_LINEAR_LOOP = 'linear-gradient(90deg, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c, #ffb085, #ffd24a, #7ad9b5, #7ec4ff, #b892ff, #ff5c6c)';
 
-function StarRating({ rarity, size = 12 }) {
-  const r = RARITY_META[rarity] || RARITY_META.R;
+// Shared keyframes for rarity effects (injected once, used by gallery + app).
+(function injectRarityStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('sg-rarity-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'sg-rarity-styles';
+  s.textContent = `
+    @keyframes sg-rainbow { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+    @keyframes sg-rainbow-rotate { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+    @keyframes sg-rainbow-slide {
+      0%   { background-position: 0% 50%; }
+      100% { background-position: 400% 50%; }
+    }
+    @keyframes sg-sheen { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    @keyframes sg-sparkle-float {
+      0%   { opacity: 0; transform: translateY(0) scale(0.5); }
+      20%  { opacity: 1; }
+      80%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-40px) scale(1.2); }
+    }
+    @keyframes sg-glow-breath {
+      0%,100% { opacity: 0.55; transform: scale(0.96); }
+      50%     { opacity: 1;    transform: scale(1.08); }
+    }
+    @keyframes sg-tear {
+      0%   { opacity: 0; transform: translateY(0) scale(0.5); }
+      25%  { opacity: 0.9; }
+      100% { opacity: 0; transform: translateY(30px) scale(1); }
+    }
+  `;
+  document.head.appendChild(s);
+})();
+
+function StarRating({ rarity, size = 12, onDark = false }) {
+  const r = RARITY_META[rarity] || RARITY_META.N;
+  // On a colored background (e.g. inside RarityBadge), solid white stars with a
+  // subtle shadow read cleanly regardless of tier color.
+  if (onDark) {
+    return (
+      <span style={{ display: 'inline-flex', gap: 1, lineHeight: 1 }}>
+        {Array.from({ length: r.stars }).map((_, i) => (
+          <span key={i} style={{
+            fontSize: size, lineHeight: 1, color: '#fff',
+            textShadow: '0 1px 2px rgba(0,0,0,0.35), 0 0 4px rgba(255,255,255,0.4)',
+          }}>★</span>
+        ))}
+      </span>
+    );
+  }
   const isRainbow = rarity === 'UR';
   return (
     <span style={{ display: 'inline-flex', gap: 1, lineHeight: 1 }}>
@@ -29,7 +78,7 @@ function StarRating({ rarity, size = 12 }) {
 }
 
 function RarityBadge({ rarity, size = 'md' }) {
-  const r = RARITY_META[rarity] || RARITY_META.R;
+  const r = RARITY_META[rarity] || RARITY_META.N;
   const isRainbow = rarity === 'UR';
   const fz = { sm: 10, md: 12, lg: 14 }[size] || 12;
   const py = { sm: 2, md: 4, lg: 6 }[size] || 4;
@@ -39,29 +88,32 @@ function RarityBadge({ rarity, size = 'md' }) {
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: `${py}px ${px}px`, borderRadius: 999,
       background: isRainbow ? RAINBOW_LINEAR : r.color,
-      backgroundSize: isRainbow ? '200% 100%' : undefined,
-      animation: isRainbow ? 'sg-rainbow 4s linear infinite' : null,
+      backgroundSize: isRainbow ? '400% 100%' : undefined,
+      animation: isRainbow ? 'sg-rainbow-slide 8s linear infinite' : null,
       color: '#fff', font: `700 ${fz}px 'Noto Sans SC'`, letterSpacing: 0.5,
-      textShadow: '0 1px 0 rgba(0,0,0,0.2)',
+      textShadow: '0 1px 2px rgba(0,0,0,0.25)',
       whiteSpace: 'nowrap',
     }}>
-      {rarity} <StarRating rarity={rarity} size={fz - 1} />
+      {rarity} <StarRating rarity={rarity} size={fz - 1} onDark />
     </span>
   );
 }
 
-// Frame that wraps content with a rarity-specific border / glow / sparkles.
+// Frame that wraps content with a rarity-specific border / glow.
+// UR uses a seamless linear rainbow slide (400% wide, repeating) — smoother
+// than conic-gradient for rectangular frames. SSR / SR use gradient sheens.
 function RarityFrame({ rarity, children, padding = 6, radius = 18, animate = true, style }) {
-  const r = RARITY_META[rarity] || RARITY_META.R;
+  const r = RARITY_META[rarity] || RARITY_META.N;
   const wrap = { position: 'relative', borderRadius: radius, padding, ...style };
 
   if (rarity === 'UR') {
     return (
       <div style={{
         ...wrap,
-        background: RAINBOW_BG, backgroundSize: '200% 200%',
-        animation: animate ? 'sg-rainbow-rotate 6s linear infinite' : null,
-        boxShadow: '0 0 18px rgba(255,210,74,0.55), 0 6px 18px rgba(0,0,0,0.1)',
+        background: RAINBOW_LINEAR_LOOP,
+        backgroundSize: '400% 100%',
+        animation: animate ? 'sg-rainbow-slide 8s linear infinite' : null,
+        boxShadow: '0 0 24px rgba(255,210,74,0.45), 0 0 8px rgba(184,146,255,0.4), 0 6px 18px rgba(0,0,0,0.1)',
       }}>
         <div style={{ background: '#fffef5', borderRadius: radius - 2, padding: 0, position: 'relative', overflow: 'hidden' }}>
           {children}
@@ -69,34 +121,37 @@ function RarityFrame({ rarity, children, padding = 6, radius = 18, animate = tru
       </div>
     );
   }
-  if (rarity === 'SSSR') {
+  if (rarity === 'SSR') {
     return (
       <div style={{
         ...wrap,
         background: `linear-gradient(135deg, ${r.color}, #ffd24a, ${r.color})`,
-        backgroundSize: '200% 200%',
-        animation: animate ? 'sg-sheen 5s ease-in-out infinite' : null,
-        boxShadow: `0 0 14px ${r.colorSoft}, 0 4px 12px rgba(0,0,0,0.06)`,
+        backgroundSize: '300% 300%',
+        animation: animate ? 'sg-sheen 6s ease-in-out infinite' : null,
+        boxShadow: `0 0 18px ${r.colorSoft}, 0 4px 14px rgba(200,111,0,0.18)`,
       }}>
         <div style={{ background: '#fff', borderRadius: radius - 2 }}>{children}</div>
-      </div>
-    );
-  }
-  if (rarity === 'SSR') {
-    return (
-      <div style={{
-        ...wrap, border: `3px solid ${r.color}`, background: '#fff',
-        boxShadow: `0 3px 10px ${r.colorSoft}`,
-      }}>
-        {children}
       </div>
     );
   }
   if (rarity === 'SR') {
     return (
       <div style={{
+        ...wrap,
+        background: `linear-gradient(135deg, ${r.color}, #d9b7f7, ${r.color})`,
+        backgroundSize: '300% 300%',
+        animation: animate ? 'sg-sheen 6s ease-in-out infinite' : null,
+        boxShadow: `0 0 12px ${r.colorSoft}, 0 3px 10px rgba(111,43,181,0.15)`,
+      }}>
+        <div style={{ background: '#fff', borderRadius: radius - 2 }}>{children}</div>
+      </div>
+    );
+  }
+  if (rarity === 'R') {
+    return (
+      <div style={{
         ...wrap, border: `2.5px solid ${r.color}`, background: '#fff',
-        boxShadow: `0 2px 6px ${r.colorSoft}`,
+        boxShadow: `0 2px 8px ${r.colorSoft}`,
       }}>
         {children}
       </div>
@@ -110,15 +165,58 @@ function RarityFrame({ rarity, children, padding = 6, radius = 18, animate = tru
 }
 
 // Particles & overlays layered on top of the flower. Intensity scales with rarity tier.
+// Uses a multi-layer aura (core highlight + mid color + soft outer fade) for SR+
+// so high-tier flowers feel "premium" rather than fogged.
 function QualityFx({ quality, rarity, box = 120 }) {
-  const r = RARITY_META[rarity] || RARITY_META.R;
+  const r = RARITY_META[rarity] || RARITY_META.N;
   const tier = RARITY_ORDER.indexOf(rarity) + 1;   // 1..5
   const isRainbow = rarity === 'UR';
 
   if (quality === 'perfect' || quality === 'great') {
-    const count = quality === 'perfect' ? tier + 2 : tier;   // 3..7 / 1..5
+    const count = quality === 'perfect' ? tier + 2 : tier;
     return (
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {/* Aura (SR+ only): layered gradients for a 3-D glow rather than flat fog. */}
+        {tier >= 3 && (
+          <>
+            {/* outer soft fade */}
+            <div style={{
+              position: 'absolute', inset: '-4%',
+              borderRadius: '50%',
+              background: isRainbow
+                ? 'radial-gradient(ellipse at 50% 55%, rgba(255,210,74,0.22) 0%, rgba(184,146,255,0.12) 40%, transparent 72%)'
+                : `radial-gradient(ellipse at 50% 55%, ${r.colorSoft}66 0%, ${r.colorSoft}22 40%, transparent 72%)`,
+              animation: 'sg-glow-breath 3.8s ease-in-out infinite',
+              filter: 'blur(2px)',
+            }} />
+            {/* mid color band */}
+            <div style={{
+              position: 'absolute', inset: '14%',
+              borderRadius: '50%',
+              background: isRainbow
+                ? 'radial-gradient(circle at 50% 55%, rgba(255,184,104,0.35) 0%, rgba(124,196,255,0.2) 50%, transparent 72%)'
+                : `radial-gradient(circle at 50% 55%, ${r.color}44 0%, ${r.color}22 45%, transparent 72%)`,
+              animation: 'sg-glow-breath 3.2s ease-in-out infinite 0.4s',
+            }} />
+            {/* inner white highlight */}
+            <div style={{
+              position: 'absolute', inset: '30%',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at 45% 40%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.15) 40%, transparent 65%)',
+              animation: 'sg-glow-breath 2.8s ease-in-out infinite 0.8s',
+            }} />
+          </>
+        )}
+        {tier === 5 && (
+          <div style={{
+            position: 'absolute', inset: '8%',
+            borderRadius: '50%',
+            background: RAINBOW_BG, backgroundSize: '200% 200%',
+            opacity: 0.11, mixBlendMode: 'screen',
+            animation: 'sg-rainbow-rotate 8s linear infinite',
+          }} />
+        )}
+        {/* Sparkles rising from petals */}
         {Array.from({ length: count }).map((_, i) => (
           <span key={i} style={{
             position: 'absolute',
@@ -130,23 +228,6 @@ function QualityFx({ quality, rarity, box = 120 }) {
             opacity: 0, filter: 'drop-shadow(0 0 3px rgba(255,210,74,0.8))',
           }}>✦</span>
         ))}
-        {tier >= 3 && (
-          <div style={{
-            position: 'absolute', inset: '12%', borderRadius: '50%',
-            background: isRainbow
-              ? 'radial-gradient(circle, rgba(255,210,74,0.35) 0%, transparent 60%)'
-              : `radial-gradient(circle, ${r.colorSoft} 0%, transparent 65%)`,
-            animation: 'sg-glow-breath 3.4s ease-in-out infinite', pointerEvents: 'none',
-          }} />
-        )}
-        {tier === 5 && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: RAINBOW_BG, backgroundSize: '200% 200%', opacity: 0.12,
-            mixBlendMode: 'screen', borderRadius: '50%',
-            animation: 'sg-rainbow-rotate 6s linear infinite', pointerEvents: 'none',
-          }} />
-        )}
       </div>
     );
   }
@@ -166,6 +247,17 @@ function QualityFx({ quality, rarity, box = 120 }) {
     );
   }
   return null;
+}
+
+// Three drifting leaf particles that animate on card hover (CSS-driven from flowers.jsx).
+function WindLeaves() {
+  return (
+    <>
+      <div className="sg-wind-leaf" />
+      <div className="sg-wind-leaf" style={{ top: '20%' }} />
+      <div className="sg-wind-leaf" style={{ top: '55%' }} />
+    </>
+  );
 }
 
 // ============ SPIN WHEEL ============
@@ -304,12 +396,13 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
               </div>
             )}
             {phase === 'result' && lastAttempt && (
-              <div style={{ textAlign: 'center' }}>
+              <div className="sg-flower-card" style={{ textAlign: 'center' }}>
                 <RarityFrame rarity={lastAttempt.rarity} padding={6} radius={22} animate={true}
                   style={{ marginBottom: 14 }}>
                   <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
                     <FlowerSVG size={160} species={lastAttempt.speciesId} quality="perfect" animate />
                     <QualityFx quality="perfect" rarity={lastAttempt.rarity} />
+                    <WindLeaves />
                   </div>
                 </RarityFrame>
                 <RarityBadge rarity={lastAttempt.rarity} size="lg" />
@@ -343,26 +436,7 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
         </>
       )}
 
-      <style>{`
-        @keyframes sg-rainbow { 0%{background-position:0% 0} 100%{background-position:200% 0} }
-        @keyframes sg-rainbow-rotate { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes sg-sheen { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
-        @keyframes sg-sparkle-float {
-          0% { opacity: 0; transform: translateY(0) scale(0.5); }
-          20% { opacity: 1; }
-          80% { opacity: 1; }
-          100% { opacity: 0; transform: translateY(-40px) scale(1.2); }
-        }
-        @keyframes sg-glow-breath {
-          0%,100% { opacity: 0.35; transform: scale(0.95); }
-          50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        @keyframes sg-tear {
-          0% { opacity: 0; transform: translateY(0) scale(0.5); }
-          25% { opacity: 0.9; }
-          100% { opacity: 0; transform: translateY(30px) scale(1); }
-        }
-      `}</style>
+      {/* Keyframes come from the global rarity-styles injection at the top of this file. */}
     </div>
   );
 }
@@ -929,7 +1003,7 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField,
 
       {/* Today's kept flower in rarity frame */}
       {kept ? (
-        <div style={{ margin: '8px 18px 0' }}>
+        <div className="sg-flower-card" style={{ margin: '8px 18px 0' }}>
           <RarityFrame rarity={kept.rarity} padding={6} radius={22}>
             <div style={{ padding: '16px 16px 18px', position: 'relative' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -940,6 +1014,7 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField,
                 <div style={{ position: 'relative', width: 120, height: 140, flexShrink: 0, display: 'grid', placeItems: 'center' }}>
                   <FlowerSVG size={110} species={kept.speciesId} quality={quality} animate />
                   <QualityFx quality={quality} rarity={kept.rarity} />
+                  <WindLeaves />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ font: "700 18px 'ZCOOL KuaiLe'", color: '#23331f' }}>
@@ -1370,7 +1445,7 @@ function HistoryScreen({ state, onClose, onPickDate }) {
             padding: '4px 10px', borderRadius: 999,
             background: r === 'UR' ? RAINBOW_LINEAR : RARITY_META[r].color,
             backgroundSize: r === 'UR' ? '200% 100%' : undefined,
-            animation: r === 'UR' ? 'sg-rainbow 4s linear infinite' : null,
+            animation: r === 'UR' ? 'sg-rainbow-slide 8s linear infinite' : null,
             color: '#fff', font: "700 11px 'Noto Sans SC'",
           }}>{r} × {stats[r]}</div>
         ))}
@@ -1447,12 +1522,14 @@ function DayDetail({ date, state, onClose }) {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 18px 24px' }}>
         {kept ? (
+          <div className="sg-flower-card">
           <RarityFrame rarity={kept.rarity} padding={6} radius={22}>
             <div style={{ padding: 20, textAlign: 'center', position: 'relative' }}>
               <div style={{ marginBottom: 8 }}><RarityBadge rarity={kept.rarity} size="md" /></div>
               <div style={{ position: 'relative', display: 'inline-block' }}>
                 <FlowerSVG size={140} species={kept.speciesId} quality={q} animate />
                 <QualityFx quality={q} rarity={kept.rarity} />
+                <WindLeaves />
               </div>
               <div style={{ font: "700 22px 'ZCOOL KuaiLe'", marginTop: 4, color: '#23331f' }}>
                 {FLOWERS[kept.speciesId]?.name}
@@ -1467,6 +1544,7 @@ function DayDetail({ date, state, onClose }) {
               </div>
             </div>
           </RarityFrame>
+          </div>
         ) : (
           <div style={{ background: '#fff', border: '2px dashed #cfe3be', borderRadius: 20, padding: 20, textAlign: 'center',
             font: "500 13px 'Noto Sans SC'", color: '#5c6d54' }}>
@@ -1756,7 +1834,7 @@ Object.assign(window, {
   TodayScreen, FoodPicker,
   SchoolSheet, OverageModal, HistoryScreen, DayDetail, TrendScreen, SettingsScreen,
   SpinWheel, PlantYesterday, FlowerField,
-  RarityFrame, RarityBadge, StarRating, QualityFx,
-  QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR,
+  RarityFrame, RarityBadge, StarRating, QualityFx, WindLeaves,
+  QUALITY_LABEL, RAINBOW_BG, RAINBOW_LINEAR, RAINBOW_LINEAR_LOOP,
   EntryList,
 });

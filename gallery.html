@@ -29,9 +29,15 @@
   .sub { color: var(--ink-soft); font: 500 14px 'Noto Sans SC'; margin: 0 0 24px; }
   h2 { font: 700 22px 'ZCOOL KuaiLe'; margin: 28px 0 10px; }
   .note { font: 500 12px 'Noto Sans SC'; color: var(--ink-soft); margin: 4px 0 14px; }
-  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .grid {
+    display: grid; gap: 14px;
+    /* auto-fill + fixed 170px keeps cards same width across tiers (no 1fr stretch) */
+    grid-template-columns: repeat(auto-fill, 170px);
+    justify-content: center;
+  }
   .card { cursor: pointer; transition: transform 0.15s; }
   .card:hover { transform: translateY(-3px); }
+  .card-flower-box { position: relative; width: 100%; display: grid; place-items: center; overflow: hidden; }
   .card-inner { padding: 14px 10px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; background: #fff; border-radius: 16px; }
   .card-name { font: 700 15px 'ZCOOL KuaiLe'; margin-top: 4px; }
   .card-desc { font: 500 11px/1.45 'Noto Sans SC'; color: var(--ink-soft); margin-top: 6px; max-width: 150px; }
@@ -108,13 +114,13 @@
 <script type="text/babel">
 const { useState: uS } = React;
 
-const TIER_LABEL = { R: '普通', SR: '稀有', SSR: '超稀', SSSR: '极稀', UR: '传说' };
+const TIER_LABEL = { N: '普通', R: '稀有', SR: '超稀', SSR: '极稀', UR: '传说' };
 const TIER_TRIGGER = {
-  R:    '每日默认最高概率',
-  SR:   '每次抽卡 ~30% 概率',
-  SSR:  '每次抽卡 ~15% 概率',
-  SSSR: '每次抽卡 ~4% 概率，需要抽卡次数多才容易见到',
-  UR:   '每次抽卡 ~1% 概率，极其罕见',
+  N:   '每日默认最高概率（~50%）',
+  R:   '每次抽卡 ~30% 概率',
+  SR:  '每次抽卡 ~15% 概率',
+  SSR: '每次抽卡 ~4% 概率，要多抽几次才容易见到',
+  UR:  '每次抽卡 ~1% 概率，极其罕见',
 };
 
 const QUALITY_LIST = [
@@ -129,12 +135,13 @@ const QUALITY_LIST = [
 function FlowerCard({ speciesId, onClick }) {
   const f = FLOWERS[speciesId];
   return (
-    <div className="card" onClick={() => onClick(speciesId)}>
+    <div className="card sg-flower-card" onClick={() => onClick(speciesId)}>
       <RarityFrame rarity={f.rarity} padding={5} radius={16} animate={true}>
         <div className="card-inner">
-          <div style={{ position: 'relative' }}>
+          <div className="card-flower-box" style={{ position: 'relative', height: 140 }}>
             <FlowerSVG size={90} species={speciesId} quality="perfect" animate headOnly={false} />
             <QualityFx quality="perfect" rarity={f.rarity} />
+            <WindLeaves />
           </div>
           <div style={{ marginTop: 6 }}><RarityBadge rarity={f.rarity} size="sm" /></div>
           <div className="card-name">{f.name}</div>
@@ -152,11 +159,12 @@ function DetailModal({ speciesId, onClose }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
         <button className="close-btn" onClick={onClose}>✕</button>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div className="sg-flower-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <RarityFrame rarity={f.rarity} padding={5} radius={18}>
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               <FlowerSVG size={130} species={speciesId} quality="perfect" animate />
               <QualityFx quality="perfect" rarity={f.rarity} />
+              <WindLeaves />
             </div>
           </RarityFrame>
           <div style={{ marginTop: 10 }}><RarityBadge rarity={f.rarity} size="md" /></div>
@@ -204,10 +212,10 @@ function App() {
       {RARITY_ORDER.map(tier => {
         const list = byRarity[tier] || [];
         if (!list.length) return null;
+        const icon = { N: '🌸', R: '🌟', SR: '✨', SSR: '💫', UR: '🌈' }[tier] || '🌼';
         return (
           <section key={tier}>
-            <h2>{tier === 'UR' ? '🌈' : tier === 'SSSR' ? '💫' : tier === 'SSR' ? '✨' : tier === 'SR' ? '🌟' : '🌸'}
-              {' '}{tier} · {TIER_LABEL[tier]}（{list.length} 种）</h2>
+            <h2>{icon} {tier} · {TIER_LABEL[tier]}（{list.length} 种）</h2>
             <p className="note">{TIER_TRIGGER[tier]}</p>
             <div className="grid">
               {list.map(id => (

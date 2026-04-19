@@ -45,23 +45,22 @@ const CATEGORY_META = {
 };
 
 // -------- Rarity tiers --------
-// colors shown as CSS — 'rainbow' is special-cased in components.
+// 5 tiers N / R / SR / SSR / UR. 'rainbow' is special-cased in components.
 const RARITY_META = {
-  R:    { stars: 1, label: '普通', color: '#6ab04c', colorSoft: '#c8e6b6', colorFaint: '#eaf4e0', stroke: '#3b6e2b' },
-  SR:   { stars: 2, label: '稀有', color: '#3b9cf5', colorSoft: '#a9d3f9', colorFaint: '#e6f1fb', stroke: '#1c6fc2' },
-  SSR:  { stars: 3, label: '超稀', color: '#a259e0', colorSoft: '#d8b8f0', colorFaint: '#f0e4fa', stroke: '#6f2bb5' },
-  SSSR: { stars: 4, label: '极稀', color: '#ff9420', colorSoft: '#ffcf91', colorFaint: '#fff0dd', stroke: '#c86f00' },
+  N:    { stars: 1, label: '普通', color: '#6ab04c', colorSoft: '#c8e6b6', colorFaint: '#eaf4e0', stroke: '#3b6e2b' },
+  R:    { stars: 2, label: '稀有', color: '#3b9cf5', colorSoft: '#a9d3f9', colorFaint: '#e6f1fb', stroke: '#1c6fc2' },
+  SR:   { stars: 3, label: '超稀', color: '#a259e0', colorSoft: '#d8b8f0', colorFaint: '#f0e4fa', stroke: '#6f2bb5' },
+  SSR:  { stars: 4, label: '极稀', color: '#ff9420', colorSoft: '#ffcf91', colorFaint: '#fff0dd', stroke: '#c86f00' },
   UR:   { stars: 5, label: '传说', color: 'rainbow', colorSoft: '#ffffff', colorFaint: '#fff',    stroke: '#2b2033' },
 };
-const RARITY_ORDER = ['R', 'SR', 'SSR', 'SSSR', 'UR'];
+const RARITY_ORDER = ['N', 'R', 'SR', 'SSR', 'UR'];
 
 // Per-pull probabilities. Each pull is an independent roll with these weights.
-// Summed = 1.0. User can tune these in one place.
 const RARITY_PROB = {
-  R:    0.50,
-  SR:   0.30,
-  SSR:  0.15,
-  SSSR: 0.04,
+  N:    0.50,
+  R:    0.30,
+  SR:   0.15,
+  SSR:  0.04,
   UR:   0.01,
 };
 
@@ -79,31 +78,31 @@ const DEFAULT_PULLS = 3;
 
 // -------- Flower species (20 total across 5 tiers) --------
 const FLOWERS = {
-  // R (8) — 基础花，每天大概率抽到
-  'c-tulip':      { name: '郁金香',   rarity: 'R',    petal: '#ff9ec4', center: '#ffd24a', shape: 'tulip',     desc: '经典合抱五瓣' },
-  'c-daisy':      { name: '雏菊',     rarity: 'R',    petal: '#f2e9ff', center: '#ffd24a', shape: 'daisy',     desc: '淡紫白八瓣' },
-  'c-sunflower':  { name: '向日葵',   rarity: 'R',    petal: '#ffd24a', center: '#7c4a1d', shape: 'sunflower', desc: '金黄十二瓣' },
-  'c-poppy':      { name: '罂粟',     rarity: 'R',    petal: '#ff5c6c', center: '#2b2033', shape: 'poppy',     desc: '朱红五瓣' },
-  'c-cosmos':     { name: '波斯菊',   rarity: 'R',    petal: '#b892ff', center: '#ffd24a', shape: 'cosmos',    desc: '粉紫六瓣' },
-  'c-marigold':   { name: '万寿菊',   rarity: 'R',    petal: '#ffb085', center: '#c2453c', shape: 'marigold',  desc: '橙红双层' },
-  'c-bluebell':   { name: '风铃草',   rarity: 'R',    petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell',  desc: '蓝色钟铃' },
-  'c-pansy':      { name: '三色堇',   rarity: 'R',    petal: '#b892ff', center: '#ffd24a', shape: 'pansy',     desc: '紫黄三色' },
+  // N (8) — 普通，最常见
+  'c-tulip':      { name: '郁金香',   rarity: 'N',    petal: '#ff9ec4', center: '#ffd24a', shape: 'tulip',     desc: '经典合抱五瓣' },
+  'c-daisy':      { name: '雏菊',     rarity: 'N',    petal: '#f2e9ff', center: '#ffd24a', shape: 'daisy',     desc: '淡紫白八瓣' },
+  'c-sunflower':  { name: '向日葵',   rarity: 'N',    petal: '#ffd24a', center: '#7c4a1d', shape: 'sunflower', desc: '金黄十二瓣' },
+  'c-poppy':      { name: '罂粟',     rarity: 'N',    petal: '#ff5c6c', center: '#2b2033', shape: 'poppy',     desc: '朱红五瓣' },
+  'c-cosmos':     { name: '波斯菊',   rarity: 'N',    petal: '#b892ff', center: '#ffd24a', shape: 'cosmos',    desc: '粉紫六瓣' },
+  'c-marigold':   { name: '万寿菊',   rarity: 'N',    petal: '#ffb085', center: '#c2453c', shape: 'marigold',  desc: '橙红双层' },
+  'c-bluebell':   { name: '风铃草',   rarity: 'N',    petal: '#7ec4ff', center: '#7ec4ff', shape: 'bluebell',  desc: '蓝色钟铃' },
+  'c-pansy':      { name: '三色堇',   rarity: 'N',    petal: '#b892ff', center: '#ffd24a', shape: 'pansy',     desc: '紫黄三色' },
 
-  // SR (3) — 蓝色
-  'u-emerald':    { name: '翡翠花',   rarity: 'SR',   petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',   desc: '翠绿菱形，坚毅绽放' },
-  'r-honeybee':   { name: '蜂蜜花',   rarity: 'SR',   petal: '#ffd24a', center: '#7c4a1d', shape: 'honeybee',  desc: '小蜜蜂最爱的花' },
-  'r-crystalrose':{ name: '水晶玫瑰', rarity: 'SR',   petal: '#a0e7f0', center: '#ffffff', shape: 'crystalrose',desc: '晶莹剔透的梦想之花' },
+  // R (3) — 稀有，蓝色
+  'u-emerald':    { name: '翡翠花',   rarity: 'R',    petal: '#5bc08c', center: '#ffd24a', shape: 'emerald',   desc: '翠绿菱形，坚毅绽放' },
+  'r-honeybee':   { name: '蜂蜜花',   rarity: 'R',    petal: '#ffd24a', center: '#7c4a1d', shape: 'honeybee',  desc: '小蜜蜂最爱的花' },
+  'r-crystalrose':{ name: '水晶玫瑰', rarity: 'R',    petal: '#a0e7f0', center: '#ffffff', shape: 'crystalrose',desc: '晶莹剔透的梦想之花' },
 
-  // SSR (3) — 紫色
-  'r-moonflower': { name: '月光花',   rarity: 'SSR',  petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower',desc: '只在糖分很少的夜晚开放' },
-  'r-stardust':   { name: '星砂花',   rarity: 'SSR',  petal: '#2b2058', center: '#ffd24a', shape: 'stardust',  desc: '花瓣上带着星星' },
-  'u-sakura':     { name: '樱花',     rarity: 'SSR',  petal: '#ffc7d8', center: '#ffffff', shape: 'sakura',    desc: '温柔的粉色五瓣' },
+  // SR (3) — 超稀，紫色
+  'r-moonflower': { name: '月光花',   rarity: 'SR',   petal: '#e0e6ff', center: '#b892ff', shape: 'moonflower',desc: '只在糖分很少的夜晚开放' },
+  'r-stardust':   { name: '星砂花',   rarity: 'SR',   petal: '#2b2058', center: '#ffd24a', shape: 'stardust',  desc: '花瓣上带着星星' },
+  'u-sakura':     { name: '樱花',     rarity: 'SR',   petal: '#ffc7d8', center: '#ffffff', shape: 'sakura',    desc: '温柔的粉色五瓣' },
 
-  // SSSR (2) — 橙色
-  'r-rainbowlily':{ name: '彩虹百合', rarity: 'SSSR', petal: 'rainbow', center: '#ffd24a', shape: 'rainbowlily',desc: '承载着今天的好心情' },
-  'u-phoenix':    { name: '凤凰花',   rarity: 'SSSR', petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',   desc: '展翅火红的传说' },
+  // SSR (2) — 极稀，橙色
+  'r-rainbowlily':{ name: '彩虹百合', rarity: 'SSR',  petal: 'rainbow', center: '#ffd24a', shape: 'rainbowlily',desc: '承载着今天的好心情' },
+  'u-phoenix':    { name: '凤凰花',   rarity: 'SSR',  petal: '#ff5c6c', center: '#ffd24a', shape: 'phoenix',   desc: '展翅火红的传说' },
 
-  // UR (2) — 彩虹色
+  // UR (2) — 传说，彩虹色
   'ur-starlight': { name: '星光花',   rarity: 'UR',   petal: '#ffd24a', center: '#fff5a0', shape: 'starlight', desc: '传说中只在完美的日子绽放' },
   'ur-crystal':   { name: '琉璃花',   rarity: 'UR',   petal: '#ffffff', center: '#ffd24a', shape: 'crystal',   desc: '折射出所有颜色的水晶花' },
 };
@@ -250,8 +249,33 @@ const LS_STATE = 'sg:state';
 const LS_IDENTITY = 'sg:identity';
 const LS_PENDING = 'sg:pending';
 
+// Bump when the state shape or rarity labels change in a way that needs migration.
+const STATE_SCHEMA_VERSION = 2;
+
+// Migrate older state blobs. v1→v2 dropped the SSSR tier and renamed tiers
+// (R→N, SR→R, SSR→SR, SSSR→SSR, UR→UR). The safe-and-cheap path is to drop
+// stale spin results; everything else (entries, schoolSugar, plantedAt) is
+// unaffected and stays put.
+function migrateState(s) {
+  if (!s || s.schemaVersion === STATE_SCHEMA_VERSION) return s;
+  const newDays = {};
+  for (const [date, day] of Object.entries(s.days || {})) {
+    newDays[date] = { ...day, spin: null, plantedAt: null };
+  }
+  return {
+    ...s,
+    days: newDays,
+    schemaVersion: STATE_SCHEMA_VERSION,
+    // Strip removed fields from old schemas.
+    unlockedUnlocks: undefined,
+  };
+}
+
 function loadState() {
-  try { const r = localStorage.getItem(LS_STATE); if (r) return JSON.parse(r); } catch(e){}
+  try {
+    const r = localStorage.getItem(LS_STATE);
+    if (r) return migrateState(JSON.parse(r));
+  } catch(e){}
   return null;
 }
 function saveState(s) {
@@ -260,6 +284,7 @@ function saveState(s) {
 
 function defaultState() {
   return {
+    schemaVersion: STATE_SCHEMA_VERSION,
     settings: {
       childName: '',
       dateOfBirth: '',
@@ -560,7 +585,9 @@ function mergeServerDayState(state, rows) {
     if (r.spinJson) {
       try {
         const remoteSpin = JSON.parse(r.spinJson);
-        if (!spin || (spin.updatedAt || 0) < ts) {
+        // Drop stale spins with pre-v2 rarity labels; the kid will re-spin.
+        const validAttempts = (remoteSpin.attempts || []).every(a => RARITY_META[a.rarity]);
+        if (validAttempts && (!spin || (spin.updatedAt || 0) < ts)) {
           spin = { ...remoteSpin, updatedAt: ts };
         }
       } catch {}
