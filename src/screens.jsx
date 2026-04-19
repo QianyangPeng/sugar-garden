@@ -261,39 +261,89 @@ function WindLeaves() {
 }
 
 // ============ SPIN WHEEL ============
-// Two-phase animation: rarity wheel blinks through 5 tiers and lands on rolled rarity,
-// then species wheel blinks through candidate species and lands on rolled species.
-// On "keep" → locks and calls onDone. On "reroll" → consumes a pull and redraws.
+// Two-phase reveal. We pre-compute the roll's (rarity, species) BEFORE the
+// animation so stage 2's carousel lands exactly on the correct flower.
+//
+//  Phase 1 (spinning-rarity): 5 rarity tiles; highlight cycles through them
+//    with decelerating ticks (55ms → 320ms using t² easing), lands on target.
+//  Phase 2 (spinning-species): a horizontal carousel strip of the target
+//    tier's species slides left via a single CSS transition with cubic-bezier
+//    ease-out — fast at start, slow landing on the target centered.
+//  Phase 3 (result): shows the committed flower in its rarity frame.
 function SpinWheel({ state, identity, date, setState, onDone }) {
   const day = state.days[date];
   const allocated = pullsForDate(state, date);
   const attempts = day?.spin?.attempts || [];
   const used = attempts.length;
-  const remaining = allocated - used;
   const lastAttempt = attempts[attempts.length - 1] || null;
 
   const [phase, setPhase] = useState(() => lastAttempt ? 'result' : 'intro');
-  // phase: intro | spinning-rarity | spinning-species | result
-  const [cycleIdx, setCycleIdx] = useState(0);
-  const cycleTimerRef = useRef(null);
+  const [rarityIdx, setRarityIdx] = useState(0);
+  const [target, setTarget] = useState(null);   // { rarity, speciesId } pre-computed
+  const [speciesStrip, setSpeciesStrip] = useState([]);
+  const [stripTx, setStripTx] = useState(0);
+  const [stripTransition, setStripTransition] = useState('none');
+  const timersRef = useRef([]);
 
-  // When entering a spinning phase, start the cycle indicator
-  useEffect(() => {
-    if (phase !== 'spinning-rarity' && phase !== 'spinning-species') return;
-    let i = 0;
-    cycleTimerRef.current = setInterval(() => {
-      i++;
-      setCycleIdx(i);
-    }, 100);
-    return () => clearInterval(cycleTimerRef.current);
-  }, [phase]);
+  useEffect(() => () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; }, []);
+  const sleep = (ms) => new Promise(r => { const id = setTimeout(r, ms); timersRef.current.push(id); });
 
-  async function startSpin() {
-    if (remaining <= 0) return;
+  // Decelerating tick animation. Intervals grow as t² so ticks start fast and slow down.
+  async function animateTicks(startIdx, totalSteps, wrapMod, onTick, minMs, maxMs) {
+    let cur = startIdx;
+    for (let i = 0; i < totalSteps; i++) {
+      const t = i / Math.max(1, totalSteps - 1);
+      const interval = minMs + (maxMs - minMs) * t * t;
+      await sleep(interval);
+      cur = (cur + 1) % wrapMod;
+      onTick(cur);
+    }
+  }
+
+  const ITEM_WIDTH = 140;
+  const VISIBLE = 3;   // strip viewport shows 3 items, center one is "selected"
+
+  async function runSpin() {
+    if (used >= allocated) return;
+    // 1. Pre-compute. Use the same forceRarity + seed addSpinAttempt will use,
+    //    so the animation target matches the committed result exactly.
+    const forceRarity = state.debug?.forceRarity || null;
+    const roll = rollFlower(identity?.familyId || 'local', date, used, forceRarity);
+    setTarget(roll);
+
+    // 2. Rarity phase: decelerating tile-highlight, lands on target tier.
     setPhase('spinning-rarity');
-    await new Promise(r => setTimeout(r, 1400));
+    const rarityTargetIdx = RARITY_ORDER.indexOf(roll.rarity);
+    const rarityFullCycles = 2;
+    const rarityStart = 0;
+    const rarityTotalSteps = rarityFullCycles * RARITY_ORDER.length +
+      ((rarityTargetIdx - rarityStart + RARITY_ORDER.length) % RARITY_ORDER.length);
+    setRarityIdx(rarityStart);
+    await animateTicks(rarityStart, rarityTotalSteps, RARITY_ORDER.length, setRarityIdx, 55, 320);
+    // Give a short beat so the user sees the locked-in rarity.
+    await sleep(250);
+
+    // 3. Species phase: precompute a long strip ending on the target, slide once.
+    const list = Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === roll.rarity);
+    const targetSpeciesIdx = list.indexOf(roll.speciesId);
+    const cycles = 3;
+    const strip = [];
+    for (let c = 0; c < cycles; c++) strip.push(...list);
+    strip.push(...list.slice(0, targetSpeciesIdx + 1));
+    setSpeciesStrip(strip);
+    setStripTx(0);
+    setStripTransition('none');
     setPhase('spinning-species');
-    await new Promise(r => setTimeout(r, 1400));
+    // Wait two frames for the new DOM (with transition: none) to commit
+    // before we set the target transform that triggers the slide.
+    await sleep(60);
+    const finalIdx = strip.length - 1;
+    const targetTx = -(finalIdx - Math.floor(VISIBLE / 2)) * ITEM_WIDTH;
+    setStripTransition('transform 2s cubic-bezier(0.17, 0.67, 0.17, 0.99)');
+    setStripTx(targetTx);
+    await sleep(2050);
+
+    // 4. Commit (rollFlower inside addSpinAttempt will produce the same result).
     const next = addSpinAttempt(state, date, identity);
     setState?.(next);
     setPhase('result');
@@ -306,22 +356,18 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
   }
 
   function reroll() {
-    // Another pull → back to spinning
-    setPhase('spinning-rarity');
-    setTimeout(async () => {
-      await new Promise(r => setTimeout(r, 1200));
-      setPhase('spinning-species');
-      await new Promise(r => setTimeout(r, 1200));
-      const next = addSpinAttempt(state, date, identity);
-      setState?.(next);
-      setPhase('result');
-    }, 200);
+    setTarget(null);
+    setSpeciesStrip([]);
+    setStripTx(0);
+    setStripTransition('none');
+    setRarityIdx(0);
+    runSpin();
   }
 
-  const tiers = RARITY_ORDER;   // ['R','SR','SSR','SSSR','UR']
-  const highlightRarity = tiers[cycleIdx % tiers.length];
-  const speciesList = lastAttempt ? Object.keys(FLOWERS).filter(k => FLOWERS[k].rarity === lastAttempt.rarity) : [];
-  const highlightSpecies = speciesList[cycleIdx % Math.max(1, speciesList.length)] || null;
+  const tiers = RARITY_ORDER;
+  const currentRarityHighlight = phase === 'spinning-rarity'
+    ? tiers[rarityIdx % tiers.length]
+    : (target?.rarity || lastAttempt?.rarity);
 
   return (
     <div style={{
@@ -346,7 +392,7 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
             你有 <b style={{ color: '#ffd24a' }}>{allocated}</b> 次抽卡机会<br/>
             抽到不喜欢的可以再抽一次，但会消耗一次机会
           </p>
-          <button onClick={startSpin} style={{
+          <button onClick={runSpin} style={{
             marginTop: 30, padding: '16px 38px', borderRadius: 24,
             border: '3px solid #fff', background: '#ffd24a', color: '#23331f',
             font: "700 18px 'Noto Sans SC'", boxShadow: '0 4px 0 #fff', cursor: 'pointer',
@@ -362,8 +408,7 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
             opacity: phase === 'intro' ? 0 : 1, transition: 'opacity 0.3s',
           }}>
             {tiers.map(t => {
-              const active = (phase === 'spinning-rarity' && t === highlightRarity) ||
-                             (phase !== 'spinning-rarity' && lastAttempt?.rarity === t);
+              const active = t === currentRarityHighlight;
               const m = RARITY_META[t];
               const isRb = t === 'UR';
               return (
@@ -383,16 +428,44 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
           </div>
 
           {/* Species reveal / spinning */}
-          <div style={{ minHeight: 280, display: 'grid', placeItems: 'center' }}>
+          <div style={{ minHeight: 300, display: 'grid', placeItems: 'center' }}>
             {phase === 'spinning-rarity' && (
-              <div style={{ font: "700 20px 'ZCOOL KuaiLe'", color: '#ffd24a' }}>转动中…</div>
+              <div style={{ font: "700 20px 'ZCOOL KuaiLe'", color: '#ffd24a', letterSpacing: 3 }}>
+                转动中…
+              </div>
             )}
-            {phase === 'spinning-species' && highlightSpecies && (
-              <div style={{ textAlign: 'center' }}>
-                <FlowerSVG size={180} species={highlightSpecies} quality="perfect" animate />
-                <div style={{ font: "700 16px 'ZCOOL KuaiLe'", marginTop: 8 }}>
-                  {FLOWERS[highlightSpecies].name}...
+            {phase === 'spinning-species' && (
+              <div style={{
+                width: VISIBLE * ITEM_WIDTH, overflow: 'hidden', position: 'relative',
+                maskImage: 'linear-gradient(90deg, transparent 0%, black 12%, black 88%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, black 12%, black 88%, transparent 100%)',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  transform: `translateX(${stripTx}px)`,
+                  transition: stripTransition,
+                  willChange: 'transform',
+                }}>
+                  {speciesStrip.map((id, i) => (
+                    <div key={i} style={{
+                      width: ITEM_WIDTH, flexShrink: 0, textAlign: 'center',
+                      padding: '8px 0', boxSizing: 'border-box',
+                    }}>
+                      <FlowerSVG size={100} species={id} quality="perfect" animate={false} />
+                      <div style={{ font: "600 12px 'ZCOOL KuaiLe'", color: '#fff', marginTop: 2, opacity: 0.85 }}>
+                        {FLOWERS[id]?.name}
+                      </div>
+                    </div>
+                  ))}
                 </div>
+                {/* center selection indicator */}
+                <div style={{
+                  position: 'absolute', top: 0, bottom: 0, left: '50%',
+                  width: ITEM_WIDTH, transform: 'translateX(-50%)',
+                  border: '2px solid #ffd24a', borderRadius: 14,
+                  pointerEvents: 'none',
+                  boxShadow: '0 0 16px rgba(255,210,74,0.5), inset 0 0 12px rgba(255,210,74,0.2)',
+                }} />
               </div>
             )}
             {phase === 'result' && lastAttempt && (
