@@ -26,7 +26,7 @@ jobs:
       - name: Stage frontend (exclude worker + CI)
         run: |
           mkdir _site
-          cp -r index.html manifest.json sw.js icon.svg src _site/
+          cp -r index.html gallery.html manifest.json sw.js icon.svg src _site/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

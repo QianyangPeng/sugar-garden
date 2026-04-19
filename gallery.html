@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>糖糖花园 · 花朵图鉴</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700;900&family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f3f8ee;
+    --bg2: #e9f1df;
+    --ink: #23331f;
+    --ink-soft: #5c6d54;
+    --card: #ffffff;
+    --accent: #6ab04c;
+    --soil: #a88968;
+    --soil-dark: #7c6142;
+    --danger: #c2453c;
+    font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: linear-gradient(180deg, #f3f8ee 0%, #e0e9d0 100%);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font: 700 36px/1.1 'ZCOOL KuaiLe'; margin: 8px 0 4px; }
+  .sub { color: var(--ink-soft); font: 500 14px 'Noto Sans SC'; margin: 0 0 24px; }
+  h2 { font: 700 22px 'ZCOOL KuaiLe'; margin: 28px 0 12px; }
+  .note { font: 500 12px 'Noto Sans SC'; color: var(--ink-soft); margin: 4px 0 14px; }
+  .grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  .card {
+    background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
+    padding: 12px 10px; box-shadow: 0 3px 0 var(--ink);
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    position: relative;
+  }
+  .card .name { font: 700 14px 'ZCOOL KuaiLe'; margin-top: 6px; }
+  .card .rarity {
+    font: 600 10px 'Noto Sans SC'; letter-spacing: 0.5px;
+    padding: 2px 8px; border-radius: 999px; margin-top: 4px;
+  }
+  .card .rarity.common { background: #eaf4e0; color: #3b6e2b; }
+  .card .rarity.rare { background: #ebe1ff; color: #6f4bd2; }
+  .card .rarity.unlock { background: #fde8e2; color: var(--danger); }
+  .card .rarity.special { background: #fff2d4; color: #a36b00; }
+  .card .desc { font: 500 10px/1.4 'Noto Sans SC'; color: var(--ink-soft); margin-top: 4px; max-width: 150px; }
+  .card .q { position: absolute; top: 6px; right: 8px; font: 700 10px 'Noto Sans SC'; color: var(--ink-soft); }
+  footer { text-align: center; color: var(--ink-soft); font-size: 13px; margin: 40px 0 12px; }
+  footer a { color: var(--accent); }
+  .back {
+    display: inline-block; font: 500 13px 'Noto Sans SC'; color: var(--ink-soft);
+    text-decoration: none; border-bottom: 1px solid var(--ink-soft); padding-bottom: 1px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="./">← 回主页</a>
+  <h1>花朵图鉴</h1>
+  <p class="sub">糖糖花园里一共能开出 18 种花 —— 8 种普通、5 种稀有、3 种解锁。这里是完整展示。</p>
+
+  <div id="root"></div>
+
+  <footer>
+    <a href="./">进入花园</a> · <a href="https://github.com/QianyangPeng/sugar-garden">源码</a>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- Reuse the exact flower code from the app (data.jsx provides FLOWERS definitions) -->
+<script type="text/babel" src="./src/data.jsx"></script>
+<script type="text/babel" src="./src/flowers.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+// Species list in display order, grouped by rarity
+const SPECIES_COMMON = [
+  { id: 'c-tulip',     desc: '经典花瓣合抱型' },
+  { id: 'c-daisy',     desc: '淡紫白八瓣' },
+  { id: 'c-sunflower', desc: '金黄十二瓣带棕心' },
+  { id: 'c-poppy',     desc: '朱红五瓣深色花心' },
+  { id: 'c-cosmos',    desc: '粉紫六瓣波斯菊' },
+  { id: 'c-marigold',  desc: '双层橙红万寿菊' },
+  { id: 'c-bluebell',  desc: '蓝色三朵钟铃' },
+  { id: 'c-pansy',     desc: '紫黄三色堇' },
+];
+const SPECIES_RARE = [
+  { id: 'r-moonflower',  desc: '银紫花瓣 · 星星闪烁动画' },
+  { id: 'r-crystalrose', desc: '冰蓝棱形水晶玫瑰' },
+  { id: 'r-rainbowlily', desc: '六色彩虹花瓣' },
+  { id: 'r-stardust',    desc: '深蓝底缀金色星粒' },
+  { id: 'r-honeybee',    desc: '金色花瓣 · 旁边有只小蜜蜂' },
+];
+const SPECIES_UNLOCK = [
+  { id: 'u-emerald', desc: '翡翠八瓣 · 连续 3 天达标' },
+  { id: 'u-sakura',  desc: '樱花粉五瓣 · 连续 5 天达标' },
+  { id: 'u-phoenix', desc: '凤凰朱红展翅 · 连续 7 天达标' },
+];
+
+function Card({ speciesId, quality = 'perfect', label, desc, rarity, showQ }) {
+  const f = speciesId ? FLOWERS[speciesId] : null;
+  const rarityMap = { common: '普通', rare: '✨ 稀有', unlock: '🎖 解锁', special: '特殊' };
+  return (
+    <div className="card">
+      {showQ && <div className="q">{showQ}</div>}
+      <FlowerSVG size={90} species={speciesId} quality={quality} animate={true} />
+      <div className="name">{label || f?.name}</div>
+      <div className={`rarity ${rarity}`}>{rarityMap[rarity]}</div>
+      {desc && <div className="desc">{desc}</div>}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div>
+      <h2>🌸 普通花 · 8 种</h2>
+      <p className="note">当天吃糖量控制在上限之内时抽取。每天根据品质（perfect/great/ok/okish）决定开放程度。</p>
+      <div className="grid">
+        {SPECIES_COMMON.map(s => (
+          <Card key={s.id} speciesId={s.id} rarity="common" desc={s.desc} />
+        ))}
+      </div>
+
+      <h2>✨ 稀有花 · 5 种</h2>
+      <p className="note">只在糖量 &lt; 50% 上限的日子有 ~18% 概率触发（约每 5-6 个低糖日出一朵）。</p>
+      <div className="grid">
+        {SPECIES_RARE.map(s => (
+          <Card key={s.id} speciesId={s.id} rarity="rare" desc={s.desc} />
+        ))}
+      </div>
+
+      <h2>🎖 解锁花 · 3 种</h2>
+      <p className="note">连续达标到特定天数永久解锁，之后 50% 概率开出。</p>
+      <div className="grid">
+        {SPECIES_UNLOCK.map(s => (
+          <Card key={s.id} speciesId={s.id} rarity="unlock" desc={s.desc} />
+        ))}
+      </div>
+
+      <h2>品质等级 · 同一朵花的 6 种状态</h2>
+      <p className="note">花的品质由当日结束时「糖量 / 上限」比例决定，花瓣大小、花茎倾斜、甚至是否枯萎都会变化。以雏菊为例：</p>
+      <div className="grid">
+        <Card speciesId="c-daisy" quality="perfect" rarity="special" label="Perfect" desc="<40% 上限 · 最大最饱满" showQ="1.0×" />
+        <Card speciesId="c-daisy" quality="great"   rarity="special" label="Great"   desc="40-70% · 标准开放" showQ="0.92×" />
+        <Card speciesId="c-daisy" quality="ok"      rarity="special" label="OK"      desc="70-90% · 茎微倾" showQ="0.85×" />
+        <Card speciesId="c-daisy" quality="okish"   rarity="special" label="OK-ish"  desc="90-100% · 茎歪花头斜" showQ="0.78×" />
+        <Card speciesId="c-daisy" quality="wilted"  rarity="special" label="Wilted"  desc="100-130% · 蔫花（去色下垂）" />
+        <Card speciesId={null}    quality="dead"    rarity="special" label="Dead"    desc="≥130% · 枯枝 + 旁边新芽" />
+      </div>
+
+      <h2>特殊状态</h2>
+      <p className="note">除了按品质开的花，还有几种跨品种的状态：</p>
+      <div className="grid">
+        <Card speciesId={null} quality="bud" rarity="special" label="Bud · 今日花苞" desc="今天这朵花还在生长中，明天早上才定型" />
+        <Card speciesId="c-poppy" quality="wilted" rarity="special" label="Wilted · 蔫花" desc="当天超标时触发，在月历里仍保留（温柔提醒）" />
+        <Card speciesId={null} quality="dead" rarity="special" label="Dead · 枯花" desc="严重超标，花死掉但有个小绿芽暗示「明天重来」" />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
