@@ -15,56 +15,115 @@
   if (document.getElementById('sg-flower-styles')) return;
   const s = document.createElement('style');
   s.id = 'sg-flower-styles';
+  // Physics notes for the gust keyframes:
+  //  - 0-18%: rest phase (no wind yet) — lets the cycle breathe
+  //  - 18-48%: pressure builds then peaks (longer bend, slight flutter while held)
+  //  - 48-70%: wind releases, spring back, small overshoot
+  //  - 70-88%: aftershake oscillations damping out
+  //  - 88-100%: back at rest
+  // The asymmetric curve + rest phases make it read as periodic gusts, not a metronome.
   s.textContent = `
     @keyframes sg-flower-head-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }
     @keyframes sg-flower-head-sway-head { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
+
+    /* Ambient: tiny irregular breeze. Not a pure sine — small variations keep it alive. */
     @keyframes sg-flower-wind-ambient {
-      0%,100% { transform: rotate(-1.3deg); }
-      50%     { transform: rotate(1.3deg); }
+      0%   { transform: rotate(-1.0deg); }
+      22%  { transform: rotate(-0.3deg); }
+      38%  { transform: rotate(-1.6deg); }
+      55%  { transform: rotate(0.4deg); }
+      72%  { transform: rotate(1.3deg); }
+      88%  { transform: rotate(0.5deg); }
+      100% { transform: rotate(-1.0deg); }
     }
+
+    /* Wind gust: physics-informed. Rest → buildup → held bend → release → aftershake → rest. */
     @keyframes sg-flower-wind-gust {
-      0%   { transform: rotate(0deg); }
-      15%  { transform: rotate(-5.5deg); }
-      35%  { transform: rotate(4deg); }
-      55%  { transform: rotate(-2.5deg); }
-      75%  { transform: rotate(1.5deg); }
-      100% { transform: rotate(0deg); }
+      0%    { transform: rotate(0deg); }
+      6%    { transform: rotate(0.1deg); }      /* pause at rest */
+      14%   { transform: rotate(-0.6deg); }     /* wind begins */
+      22%   { transform: rotate(-1.8deg); }     /* pressure building */
+      30%   { transform: rotate(-3.5deg); }
+      38%   { transform: rotate(-4.8deg); }     /* first deep bend */
+      44%   { transform: rotate(-4.3deg); }     /* brief relax while held */
+      50%   { transform: rotate(-5.2deg); }     /* peak bend */
+      56%   { transform: rotate(-3.8deg); }     /* wind releasing */
+      62%   { transform: rotate(-1.5deg); }
+      67%   { transform: rotate(0.6deg); }      /* passing through */
+      71%   { transform: rotate(1.4deg); }      /* overshoot */
+      76%   { transform: rotate(0.5deg); }
+      81%   { transform: rotate(-0.5deg); }     /* damped counter-swing */
+      86%   { transform: rotate(0.2deg); }
+      91%   { transform: rotate(-0.1deg); }
+      96%   { transform: rotate(0.05deg); }
+      100%  { transform: rotate(0deg); }
     }
+
     .sg-flower-body {
       transform-box: view-box;
       transform-origin: 50px 140px;
-      animation: sg-flower-wind-ambient 5.2s ease-in-out infinite;
+      animation: sg-flower-wind-ambient 6.8s ease-in-out infinite;
     }
     .sg-flower-body-head {
       transform-box: fill-box;
       transform-origin: center center;
-      animation: sg-flower-wind-ambient 5.2s ease-in-out infinite;
+      animation: sg-flower-wind-ambient 6.8s ease-in-out infinite;
     }
+    /* On hover: swap in the gust animation. The 4.2s duration + long rest phase
+       makes individual gusts feel spaced out, not a continuous flail. */
     .sg-flower-card:hover .sg-flower-body,
     .sg-flower-card:hover .sg-flower-body-head {
-      animation: sg-flower-wind-gust 1.4s ease-in-out infinite;
-    }
-    .sg-flower-card:active .sg-flower-body,
-    .sg-flower-card:active .sg-flower-body-head {
-      animation-duration: 0.8s;
+      animation: sg-flower-wind-gust 4.2s cubic-bezier(0.33, 0.1, 0.45, 1) infinite;
     }
 
-    /* Wind-gust particles (tiny leaves drifting left-to-right). Hidden by default. */
+    /* Leaf particles — curved drift with slight bob + size variation for a less mechanical feel. */
     .sg-wind-leaf {
       position: absolute; top: 0; left: 0;
-      width: 14px; height: 10px; opacity: 0; pointer-events: none;
+      width: 13px; height: 9px; opacity: 0; pointer-events: none;
       background: radial-gradient(ellipse at 30% 50%, #7ab985 0%, #5a8f5e 60%, transparent 65%);
       border-radius: 55% 35% 55% 35% / 60% 30% 70% 40%;
-      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.12));
     }
-    .sg-flower-card:hover .sg-wind-leaf { animation: sg-wind-leaf-drift 1.8s linear infinite; }
-    .sg-flower-card:hover .sg-wind-leaf:nth-child(2) { animation-delay: 0.6s; animation-duration: 2.1s; }
-    .sg-flower-card:hover .sg-wind-leaf:nth-child(3) { animation-delay: 1.2s; animation-duration: 1.6s; }
-    @keyframes sg-wind-leaf-drift {
-      0%   { opacity: 0; transform: translate(-10%, 40%) rotate(-20deg); }
-      20%  { opacity: 0.85; }
-      80%  { opacity: 0.85; }
-      100% { opacity: 0; transform: translate(120%, 20%) rotate(40deg); }
+    /* Three leaves, each with different size, path curvature, speed, and delay so they
+       read as scattered debris rather than a parade. */
+    .sg-flower-card:hover .sg-wind-leaf:nth-child(1) {
+      animation: sg-wind-leaf-drift-a 2.4s cubic-bezier(0.4, 0.0, 0.6, 1) 0.4s infinite;
+    }
+    .sg-flower-card:hover .sg-wind-leaf:nth-child(2) {
+      width: 10px; height: 7px;
+      animation: sg-wind-leaf-drift-b 2.8s cubic-bezier(0.3, 0.0, 0.5, 1) 1.1s infinite;
+    }
+    .sg-flower-card:hover .sg-wind-leaf:nth-child(3) {
+      width: 16px; height: 11px;
+      animation: sg-wind-leaf-drift-c 2.1s cubic-bezier(0.5, 0.0, 0.5, 1) 1.8s infinite;
+    }
+    /* Each drift has a different bob shape — higher arc, lower arc, straight-ish. */
+    @keyframes sg-wind-leaf-drift-a {
+      0%   { opacity: 0; transform: translate(-15%, 45%) rotate(-25deg) scale(0.7); }
+      10%  { opacity: 0.9; }
+      28%  { transform: translate(15%, 30%) rotate(10deg) scale(0.95); }
+      55%  { transform: translate(48%, 42%) rotate(35deg) scale(1); }
+      80%  { transform: translate(82%, 28%) rotate(55deg) scale(0.9); }
+      92%  { opacity: 0.7; }
+      100% { opacity: 0; transform: translate(122%, 40%) rotate(70deg) scale(0.6); }
+    }
+    @keyframes sg-wind-leaf-drift-b {
+      0%   { opacity: 0; transform: translate(-12%, 25%) rotate(15deg) scale(0.7); }
+      12%  { opacity: 0.85; }
+      30%  { transform: translate(18%, 50%) rotate(-10deg) scale(0.92); }
+      55%  { transform: translate(50%, 38%) rotate(-5deg) scale(1); }
+      82%  { transform: translate(85%, 55%) rotate(-30deg) scale(0.85); }
+      93%  { opacity: 0.6; }
+      100% { opacity: 0; transform: translate(125%, 48%) rotate(-45deg) scale(0.65); }
+    }
+    @keyframes sg-wind-leaf-drift-c {
+      0%   { opacity: 0; transform: translate(-18%, 62%) rotate(0deg) scale(0.8); }
+      10%  { opacity: 0.8; }
+      35%  { transform: translate(22%, 55%) rotate(20deg) scale(1); }
+      60%  { transform: translate(55%, 60%) rotate(15deg) scale(1.05); }
+      85%  { transform: translate(90%, 52%) rotate(40deg) scale(0.95); }
+      93%  { opacity: 0.5; }
+      100% { opacity: 0; transform: translate(128%, 58%) rotate(60deg) scale(0.7); }
     }
   `;
   document.head.appendChild(s);
