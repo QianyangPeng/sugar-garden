@@ -1,0 +1,50 @@
+# 糖糖花园 Worker config
+# BEFORE FIRST DEPLOY you must fill in the four __REPLACE_ME__ values below.
+# See README.md → "Deploy your own backend" for the exact commands.
+
+name = "sugar-garden"
+main = "src/index.ts"
+compatibility_date = "2024-12-30"
+
+[vars]
+# Where your GitHub Pages frontend is served. Must match exactly (no trailing slash).
+ALLOWED_ORIGIN = "https://qianyangpeng.github.io"
+# Cap total new-family registrations per day. Emergency brake if someone tries to flood.
+MAX_REGISTRATIONS_PER_DAY = "500"
+
+# ---- D1 database ----
+# Run:  wrangler d1 create sugar-garden
+# Paste the database_id it prints below.
+[[d1_databases]]
+binding = "DB"
+database_name = "sugar-garden"
+database_id = "b7bb3eae-a2e8-463b-b3fd-41d8b0409d84"
+
+# ---- KV namespace (counters + circuit breaker) ----
+# Run:  wrangler kv namespace create sugar-garden-kv
+# Paste the id it prints.
+[[kv_namespaces]]
+binding = "KV"
+id = "36681b6789d94497ab2e0ade285dfd5d"
+
+# ---- Rate limiter: per-IP registrations ----
+# namespace_id is ARBITRARY — pick two different integers. Not tied to any CF resource.
+[[unsafe.bindings]]
+name = "REG_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }   # 5 registrations / minute / IP
+
+# ---- Rate limiter: per-family writes ----
+[[unsafe.bindings]]
+name = "WRITE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 300, period = 3600 }   # 300 writes / hour / family
+
+# ---- Scheduled cleanup ----
+[triggers]
+crons = ["0 4 * * 1"]   # Mondays 04:00 UTC: delete inactive families (>60d)
+
+# Secrets (set via `wrangler secret put`, not in this file):
+#   TURNSTILE_SECRET   — from https://dash.cloudflare.com → Turnstile → your site → Settings

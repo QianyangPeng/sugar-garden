@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#f3f8ee" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="糖糖花园" />
+<meta name="description" content="温柔地记录每天吃的糖，家人一起守护小朋友的花园。" />
+<title>糖糖花园</title>
+
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='56'%3E%F0%9F%8C%BC%3C/text%3E%3C/svg%3E" />
+<link rel="apple-touch-icon" href="./icon.svg" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700;900&family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #f3f8ee;
+    --bg2: #e9f1df;
+    --ink: #23331f;
+    --ink-soft: #5c6d54;
+    --card: #ffffff;
+    --paper: #fcf9f0;
+    --accent: #6ab04c;
+    --accent-dark: #3b6e2b;
+    --leaf: #7ab985;
+    --soil: #a88968;
+    --soil-dark: #7c6142;
+    --petal-pink: #ff9ec4;
+    --petal-yellow: #ffd24a;
+    --petal-purple: #b892ff;
+    --petal-peach: #ffb085;
+    --petal-sky: #7ec4ff;
+    --danger: #c2453c;
+    font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); overscroll-behavior: none; height: 100%; }
+  body { min-height: 100vh; min-height: 100dvh; }
+
+  #root {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    overflow: hidden;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  #boot {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    font: 700 18px 'Noto Sans SC';
+    color: var(--ink);
+    background: var(--bg);
+    z-index: 1000;
+    transition: opacity 0.3s;
+  }
+  #boot.gone { opacity: 0; pointer-events: none; }
+
+  /* On desktop, center the mobile-width app for nicer dev experience */
+  @media (min-width: 520px) {
+    html, body { background: #1d2a18; }
+    #root {
+      position: relative;
+      width: 420px; height: min(92vh, 880px);
+      margin: 24px auto;
+      border-radius: 36px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 0 0 8px #111;
+      inset: auto;
+    }
+    #boot { background: #1d2a18; color: #cfe3be; }
+  }
+</style>
+</head>
+<body>
+
+<div id="boot">🌱 糖糖花园加载中…</div>
+<div id="root"></div>
+
+<!--
+  ======================================================================
+  SG_CONFIG — fill these in AFTER you deploy your Cloudflare Worker.
+  ======================================================================
+  1. apiUrl:           from `wrangler deploy` output, e.g.
+                       https://sugar-garden.yourname.workers.dev
+  2. turnstileSiteKey: from Cloudflare dashboard → Turnstile → your site.
+                       Leave empty ('') to disable Turnstile (not recommended).
+  See HANDOFF.md for step-by-step.
+-->
+<script>
+  window.SG_CONFIG = {
+    apiUrl: 'https://sugar-garden.qianyangpeng.workers.dev',               // e.g. 'https://sugar-garden.yourname.workers.dev'
+    turnstileSiteKey: '0x4AAAAAAC_j-UwkDnvEP6zA',
+  };
+</script>
+
+<!-- Turnstile (only loaded if a site key is present) -->
+<script>
+  if (window.SG_CONFIG.turnstileSiteKey) {
+    const s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.async = true; s.defer = true;
+    document.head.appendChild(s);
+  }
+</script>
+
+<!-- React + Babel (standalone, JSX in-browser) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="./src/data.jsx"></script>
+<script type="text/babel" src="./src/sync.jsx"></script>
+<script type="text/babel" src="./src/flowers.jsx"></script>
+<script type="text/babel" src="./src/screens.jsx"></script>
+<script type="text/babel" src="./src/app.jsx"></script>
+
+<!-- Basic PWA service worker for offline use -->
+<script>
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
