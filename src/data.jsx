@@ -157,11 +157,16 @@ function rollSpecies(seed, rarity) {
 // Composite: given familyId + date + pullIndex, produce a reproducible
 // {rarity, speciesId}. `quality` is yesterday's final quality and picks the
 // weight row; `forceRarity` (debug) short-circuits the rarity roll.
-function rollFlower(familyId, date, pullIndex, forceRarity, quality) {
+//
+// `nonce` breaks determinism when passed (debug only). Normal play leaves it 0
+// so family devices agree. Debug mode injects Date.now() so repeated
+// forced spins / reset-and-respin give different flowers for testing.
+function rollFlower(familyId, date, pullIndex, forceRarity, quality, nonce) {
   const weights = rarityProbForQuality(quality || 'ok');
-  const seed = hashStr(`${familyId}:${date}:${pullIndex}:rarity`);
+  const nSuffix = nonce ? `:n${nonce}` : '';
+  const seed = hashStr(`${familyId}:${date}:${pullIndex}${nSuffix}:rarity`);
   const rarity = forceRarity && RARITY_META[forceRarity] ? forceRarity : rollRarity(seed, weights);
-  const speciesSeed = hashStr(`${familyId}:${date}:${pullIndex}:${rarity}`);
+  const speciesSeed = hashStr(`${familyId}:${date}:${pullIndex}${nSuffix}:${rarity}`);
   const speciesId = rollSpecies(speciesSeed, rarity);
   return { rarity, speciesId, pullIndex };
 }
@@ -431,15 +436,21 @@ function updateSettings(state, patch) {
 
 // Record a spin attempt (for today). Appends to attempts history.
 // If state.debug.forceRarity is set, the rarity is overridden (and flag cleared).
-function addSpinAttempt(state, date, identity) {
+// `precomputedRoll` lets SpinWheel pass in the same roll it animated so the
+// committed result matches the carousel landing exactly (important when a
+// nonce-based roll would otherwise differ between pre-compute and commit).
+function addSpinAttempt(state, date, identity, precomputedRoll) {
   let next = ensureDay(state, date);
   const day = next.days[date];
   const attempts = day.spin?.attempts || [];
   const allocated = day.spin?.pullsAllocated ?? pullsForDate(state, date);
   if (attempts.length >= allocated) return next;
   const forceRarity = state.debug?.forceRarity || null;
-  const quality = effectiveQualityFor(state, date);
-  const roll = rollFlower(identity?.familyId || 'local', date, attempts.length, forceRarity, quality);
+  let roll = precomputedRoll;
+  if (!roll) {
+    const quality = effectiveQualityFor(state, date);
+    roll = rollFlower(identity?.familyId || 'local', date, attempts.length, forceRarity, quality);
+  }
   const now = Date.now();
   const newAttempts = [...attempts, { rarity: roll.rarity, speciesId: roll.speciesId }];
   next = { ...next, days: { ...next.days, [date]: {

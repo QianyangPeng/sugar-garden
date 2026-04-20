@@ -305,11 +305,15 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
 
   async function runSpin() {
     if (used >= allocated) return;
-    // 1. Pre-compute. Must match addSpinAttempt's call exactly (same seed +
-    //    quality + forceRarity) so the animation lands on the committed result.
+    // 1. Pre-compute the roll. In debug mode we mix a Date.now() nonce into
+    //    the seed so repeated forced spins / reset-then-respin produce different
+    //    flowers for testing. We pass the exact roll to addSpinAttempt below
+    //    so the committed result matches the animation landing — no drift.
     const forceRarity = state.debug?.forceRarity || null;
     const quality = effectiveQualityFor(state, date);
-    const roll = rollFlower(identity?.familyId || 'local', date, used, forceRarity, quality);
+    const inDebug = debugIsEnabled() || !!forceRarity;
+    const nonce = inDebug ? Date.now() : 0;
+    const roll = rollFlower(identity?.familyId || 'local', date, used, forceRarity, quality, nonce);
     setTarget(roll);
 
     // 2. Rarity phase: decelerating tile-highlight, lands on target tier.
@@ -353,7 +357,9 @@ function SpinWheel({ state, identity, date, setState, onDone }) {
     await sleep(2850);
 
     // 4. Commit (rollFlower inside addSpinAttempt will produce the same result).
-    const next = addSpinAttempt(state, date, identity);
+    // Pass the precomputed roll so the commit matches what the animation showed
+    // (matters when nonce is set — re-rolling would give a different result).
+    const next = addSpinAttempt(state, date, identity, roll);
     setState?.(next);
     setPhase('result');
   }
