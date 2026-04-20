@@ -811,6 +811,16 @@ function WelcomeScreen({ onChoose }) {
       <div style={{ textAlign: 'center', font: "500 11px 'Noto Sans SC'", color: '#5c6d54', marginTop: 10 }}>
         数据同步到云端，家人之间共用一个花园
       </div>
+      <div style={{ textAlign: 'center', marginTop: 18, display: 'flex', justifyContent: 'center', gap: 18 }}>
+        <a href="./rules.html" style={{
+          font: "600 12px 'Noto Sans SC'", color: '#5c6d54',
+          textDecoration: 'none', borderBottom: '1px dashed #5c6d54', paddingBottom: 1,
+        }}>📖 游戏规则</a>
+        <a href="./gallery.html" style={{
+          font: "600 12px 'Noto Sans SC'", color: '#5c6d54',
+          textDecoration: 'none', borderBottom: '1px dashed #5c6d54', paddingBottom: 1,
+        }}>🌻 花朵图鉴</a>
+      </div>
     </div>
   );
 }
@@ -1275,7 +1285,7 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField,
       </div>
 
       {/* Today log */}
-      <div style={{ margin: '18px 18px 18px' }}>
+      <div style={{ margin: '18px 18px 12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
           <div style={{ font: "700 15px 'ZCOOL KuaiLe'", color: '#23331f' }}>今天的糖糖日记</div>
           <div style={{ font: "500 11px 'Noto Sans SC'", color: '#5c6d54' }}>
@@ -1283,6 +1293,18 @@ function TodayScreen({ state, setState, onOpenPicker, onOpenSchool, onOpenField,
           </div>
         </div>
         <EntryList entries={day.entries.filter(e => !e.deleted)} onDelete={(id) => setState(s => removeEntry(s, date, id))} />
+      </div>
+
+      {/* Help links — game rules + flower gallery */}
+      <div style={{ textAlign: 'center', padding: '18px 18px 24px', display: 'flex', justifyContent: 'center', gap: 20 }}>
+        <a href="./rules.html" style={{
+          font: "600 12px 'Noto Sans SC'", color: '#5c6d54',
+          textDecoration: 'none', borderBottom: '1px dashed #a8b0a0', paddingBottom: 1,
+        }}>📖 游戏规则</a>
+        <a href="./gallery.html" style={{
+          font: "600 12px 'Noto Sans SC'", color: '#5c6d54',
+          textDecoration: 'none', borderBottom: '1px dashed #a8b0a0', paddingBottom: 1,
+        }}>🌻 花朵图鉴</a>
       </div>
     </div>
   );
